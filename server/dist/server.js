@@ -16,6 +16,8 @@ const users_1 = __importDefault(require("./routes/users"));
 const questions_1 = __importDefault(require("./routes/questions"));
 const simulations_1 = __importDefault(require("./routes/simulations"));
 const rankings_1 = __importDefault(require("./routes/rankings"));
+const ai_1 = __importDefault(require("./routes/ai"));
+const StatisticsCacheService_1 = require("./services/StatisticsCacheService");
 const app = (0, express_1.default)();
 app.use(monitoring_1.morganLogger);
 app.use(monitoring_1.requestLogger);
@@ -37,6 +39,7 @@ app.use('/api/users', users_1.default);
 app.use('/api/questions', questions_1.default);
 app.use('/api/simulations', rateLimiting_1.simulationRateLimit, simulations_1.default);
 app.use('/api/rankings', rankings_1.default);
+app.use('/api/ai', ai_1.default);
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'OK',
@@ -56,13 +59,21 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
     try {
         console.warn('⚠️  Rodando em modo de desenvolvimento com MockDB');
-        app.listen(PORT, () => {
+        app.listen(PORT, async () => {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🌐 API available at http://localhost:${PORT}/api`);
             console.log(`🎯 Use as credenciais de teste:`);
             console.log(`  📧 joao@teste.com (senha: 123456)`);
             console.log(`  📧 maria@teste.com (senha: senha123)`);
+            console.log(`🔥 Iniciando warm-up do cache de estatísticas...`);
+            try {
+                await StatisticsCacheService_1.statisticsCacheService.warmupCache();
+                console.log(`✅ Cache de estatísticas inicializado com sucesso`);
+            }
+            catch (cacheError) {
+                console.error(`❌ Erro ao inicializar cache de estatísticas:`, cacheError);
+            }
         });
     }
     catch (error) {

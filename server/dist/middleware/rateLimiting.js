@@ -7,7 +7,7 @@ exports.userSimulationRateLimit = exports.simulationRateLimit = exports.register
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 exports.generalRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: process.env.NODE_ENV === 'development' ? 10000 : 100,
     message: {
         success: false,
         message: 'Muitas requisições deste IP, tente novamente em 15 minutos.',
@@ -15,6 +15,13 @@ exports.generalRateLimit = (0, express_rate_limit_1.default)({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+        if (process.env.NODE_ENV === 'development' &&
+            (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip?.includes('localhost'))) {
+            return true;
+        }
+        return false;
+    },
     handler: (req, res) => {
         console.log(`⚠️ Rate limit atingido para IP: ${req.ip} - Path: ${req.path}`);
         res.status(429).json({
@@ -65,14 +72,21 @@ exports.registerRateLimit = (0, express_rate_limit_1.default)({
 });
 exports.simulationRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 5 * 60 * 1000,
-    max: 20,
+    max: process.env.NODE_ENV === 'development' ? 5000 : 20,
     message: {
         success: false,
         message: 'Muitas requisições de simulados, aguarde alguns minutos.',
         retryAfter: 5 * 60
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    skip: (req) => {
+        if (process.env.NODE_ENV === 'development' &&
+            (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip?.includes('localhost'))) {
+            return true;
+        }
+        return false;
+    }
 });
 const userRateLimitStore = {};
 const userSimulationRateLimit = (req, res, next) => {

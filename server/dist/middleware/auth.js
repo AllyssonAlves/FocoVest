@@ -55,7 +55,23 @@ const authenticateToken = async (req, res, next) => {
             return;
         }
         const decoded = (0, exports.verifyToken)(token);
-        const user = await User_1.default.findById(decoded.userId).select('+password');
+        const isMongoAvailable = () => {
+            try {
+                const mongoose = require('mongoose');
+                return mongoose.connection.readyState === 1;
+            }
+            catch (error) {
+                return false;
+            }
+        };
+        let user;
+        if (isMongoAvailable()) {
+            user = await User_1.default.findById(decoded.userId).select('+password');
+        }
+        else {
+            const { MockUser } = require('../services/MockUserService');
+            user = await MockUser.findById(decoded.userId);
+        }
         if (!user) {
             res.status(401).json({
                 success: false,
@@ -88,8 +104,24 @@ const optionalAuth = async (req, res, next) => {
         if (!token) {
             return next();
         }
+        const isMongoAvailable = () => {
+            try {
+                const mongoose = require('mongoose');
+                return mongoose.connection.readyState === 1;
+            }
+            catch (error) {
+                return false;
+            }
+        };
         const decoded = (0, exports.verifyToken)(token);
-        const user = await User_1.default.findById(decoded.userId);
+        let user;
+        if (isMongoAvailable()) {
+            user = await User_1.default.findById(decoded.userId);
+        }
+        else {
+            const { MockUser } = require('../services/MockUserService');
+            user = await MockUser.findById(decoded.userId);
+        }
         if (user) {
             req.user = user;
         }

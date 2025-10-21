@@ -139,7 +139,13 @@ class AuthService {
                 throw (0, errorHandler_1.createError)('Email ou senha incorretos', 401);
             }
             console.log('✅ AuthService: Senha correta, gerando token...');
+            console.log('🔑 AuthService: Dados do usuário para token:', {
+                id: user._id,
+                email: user.email,
+                tipo_id: typeof user._id
+            });
             const token = (0, auth_1.generateToken)(user);
+            console.log('🎟️  AuthService: Token gerado com payload para userId:', user._id);
             const userResponse = {
                 _id: user._id,
                 name: user.name,
@@ -239,14 +245,28 @@ class AuthService {
     }
     static async changePassword(userId, currentPassword, newPassword) {
         try {
+            const UserModel = isMongoAvailable() ? User_1.default : MockUserService_1.MockUser;
             if (!newPassword || newPassword.length < 8) {
                 throw (0, errorHandler_1.createError)('Nova senha deve ter pelo menos 8 caracteres', 400);
             }
-            const user = await User_1.default.findById(userId).select('+password');
+            let user;
+            if (isMongoAvailable()) {
+                user = await User_1.default.findById(userId).select('+password');
+            }
+            else {
+                user = await MockUserService_1.MockUser.findById(userId);
+            }
             if (!user) {
                 throw (0, errorHandler_1.createError)('Usuário não encontrado', 404);
             }
-            const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+            let isCurrentPasswordValid;
+            if (isMongoAvailable()) {
+                isCurrentPasswordValid = await user.comparePassword(currentPassword);
+            }
+            else {
+                const bcrypt = require('bcryptjs');
+                isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+            }
             if (!isCurrentPasswordValid) {
                 throw (0, errorHandler_1.createError)('Senha atual incorreta', 400);
             }

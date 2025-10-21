@@ -1,5 +1,6 @@
 {
   "name": "focovest-platform",
+  "homepage": "https://allyssonalves.github.io/FocoVest/",
   "version": "1.0.0",
   "description": "Plataforma de simulados online para vestibulares UVA, UECE, UFC, URCA e IFCE",
   "author": "FocoVest Team",
@@ -26,10 +27,13 @@
     "install:server": "cd server && npm install",
     "install:shared": "cd shared && npm install",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
-    "docker:prod": "docker-compose -f docker-compose.yml up --build"
+    "docker:prod": "docker-compose -f docker-compose.yml up --build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "gh-pages": "^6.3.0"
   },
   "engines": {
     "node": ">=18.0.0",
