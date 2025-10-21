@@ -1,0 +1,17 @@
+{
+  "name": "focovest-shared",
+  "version": "1.0.0",
+  "description": "Tipos e utilitários compartilhados entre frontend e backend",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "@types/jest": "^29.5.8",
+    "jest": "^29.7.0"
+  }
+}

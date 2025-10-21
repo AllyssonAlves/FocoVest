@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_headers
+Disallow: /.env*
+Disallow: /config/
+
+# Sitemap
+Sitemap: https://focovest.github.io/sitemap.xml
+
+# Crawl-delay for bots
+Crawl-delay: 1

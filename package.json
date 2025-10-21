@@ -1,0 +1,41 @@
+{
+  "name": "focovest-platform",
+  "version": "1.0.0",
+  "description": "Plataforma de simulados online para vestibulares UVA, UECE, UFC, URCA e IFCE",
+  "author": "FocoVest Team",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "build": "npm run build:shared && npm run build:client && npm run build:server",
+    "build:shared": "cd shared && npm run build",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "test": "npm run test:client && npm run test:server",
+    "test:client": "cd client && npm run test",
+    "test:server": "cd server && npm run test",
+    "install:all": "npm install && npm run install:client && npm run install:server && npm run install:shared",
+    "install:client": "cd client && npm install",
+    "install:server": "cd server && npm install",
+    "install:shared": "cd shared && npm install",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
+    "docker:prod": "docker-compose -f docker-compose.yml up --build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.12.2"
+  }
+}

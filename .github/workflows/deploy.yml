@@ -1,0 +1,140 @@
+name: 🚀 Deploy FocoVest to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Job de segurança e testes
+  security-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 🔒 Security Audit
+      run: |
+        cd client
+        npm audit --audit-level high
+        
+    - name: 🧪 Run Tests
+      run: |
+        cd client
+        npm install
+        npm run test:coverage
+        
+    - name: 📊 Upload Coverage
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./client/coverage
+
+  # Job de build e deploy
+  build-and-deploy:
+    needs: security-checks
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: 📦 Install Dependencies
+      run: |
+        cd client
+        npm ci --only=production
+        
+    - name: 🔧 Build Application
+      run: |
+        cd client
+        npm run build
+      env:
+        REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+        REACT_APP_ENCRYPTION_KEY: ${{ secrets.REACT_APP_ENCRYPTION_KEY }}
+        REACT_APP_ENVIRONMENT: production
+        REACT_APP_ENABLE_DEBUG: false
+        
+    - name: 🔍 Security Headers Check
+      run: |
+        cd client/dist
+        if [ -f "_headers" ]; then
+          echo "✅ Security headers file found"
+          cat _headers
+        else
+          echo "❌ Security headers file missing"
+          exit 1
+        fi
+        
+    - name: 🧹 Clean Build
+      run: |
+        cd client/dist
+        # Remove source maps em produção
+        find . -name "*.map" -type f -delete
+        # Remove arquivos de desenvolvimento
+        rm -f .env.development .env.local
+        
+    - name: 📄 Setup Pages
+      uses: actions/configure-pages@v4
+      
+    - name: 📤 Upload Artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './client/dist'
+        
+    - name: 🚀 Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  # Job de monitoramento pós-deploy
+  post-deploy-checks:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🌐 Health Check
+      run: |
+        # Aguardar deploy
+        sleep 30
+        
+        # Verificar se o site está acessível
+        response=$(curl -s -o /dev/null -w "%{http_code}" https://${{ github.repository_owner }}.github.io/focovest/)
+        if [ $response -eq 200 ]; then
+          echo "✅ Site is accessible"
+        else
+          echo "❌ Site is not accessible (HTTP $response)"
+          exit 1
+        fi
+        
+    - name: 🔒 Security Headers Check
+      run: |
+        # Verificar headers de segurança
+        headers=$(curl -I -s https://${{ github.repository_owner }}.github.io/focovest/)
+        
+        if echo "$headers" | grep -q "X-Frame-Options"; then
+          echo "✅ X-Frame-Options header present"
+        else
+          echo "⚠️ X-Frame-Options header missing"
+        fi
+        
+        if echo "$headers" | grep -q "X-Content-Type-Options"; then
+          echo "✅ X-Content-Type-Options header present"
+        else
+          echo "⚠️ X-Content-Type-Options header missing"
+        fi
