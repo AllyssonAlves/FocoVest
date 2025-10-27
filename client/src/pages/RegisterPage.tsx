@@ -71,41 +71,46 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="register-name" className="block text-sm font-medium text-gray-700 mb-2">
                 Nome completo
               </label>
               <input
                 type="text"
+                id="register-name"
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
                 className="input"
                 placeholder="Seu nome completo"
                 required
+                autoComplete="name"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="register-email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email
               </label>
               <input
                 type="email"
+                id="register-email"
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
                 className="input"
                 placeholder="seu@email.com"
                 required
+                autoComplete="email"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="register-password" className="block text-sm font-medium text-gray-700 mb-2">
                 Senha
               </label>
               <input
                 type="password"
+                id="register-password"
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
@@ -113,18 +118,21 @@ export default function RegisterPage() {
                 placeholder="••••••••"
                 minLength={8}
                 required
+                autoComplete="new-password"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="register-university" className="block text-sm font-medium text-gray-700 mb-2">
                 Universidade de interesse
               </label>
               <select 
+                id="register-university"
                 name="university"
                 value={formData.university}
                 onChange={handleChange}
                 className="input"
+                autoComplete="organization"
               >
                 <option value="">Selecione uma universidade</option>
                 <option value="UFC">UFC</option>
@@ -136,16 +144,18 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="register-course" className="block text-sm font-medium text-gray-700 mb-2">
                 Curso (opcional)
               </label>
               <input
                 type="text"
+                id="register-course"
                 name="course"
                 value={formData.course}
                 onChange={handleChange}
                 className="input"
                 placeholder="Ex: Medicina, Engenharia..."
+                autoComplete="off"
               />
             </div>
 

@@ -378,31 +378,63 @@ class StatisticsCacheService {
   }
 
   /**
-   * Pré-aquecer cache com dados mais utilizados
+   * Pré-aquecer cache com dados mais utilizados - versão otimizada e não-bloqueante
    */
-  async warmupCache(): Promise<void> {
-    console.log('🔥 StatisticsCache: Iniciando warm-up do cache...')
+  async warmupCache(options: { background?: boolean; limit?: number } = {}): Promise<void> {
+    const { background = false, limit = 3 } = options
     
-    try {
-      // Carregar estatísticas globais e de ranking
-      await Promise.all([
-        this.getGlobalStatistics(),
-        this.getRankingStatistics()
-      ])
+    const executeWarmup = async () => {
+      const { globalLogger } = await import('../utils/logger')
+      globalLogger.info('Statistics cache warmup started')
+      
+      try {
+        // Verificar se deve ser executado em produção
+        if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_CACHE_WARMUP) {
+          globalLogger.info('Cache warmup skipped in production (set ENABLE_CACHE_WARMUP=true to enable)')
+          return
+        }
 
-      // Carregar estatísticas dos top 5 usuários
-      const users = await mockUserDB.getAllUsers()
-      const topUsers = users
-        .sort((a: MockUserType, b: MockUserType) => (b.statistics?.averageScore || 0) - (a.statistics?.averageScore || 0))
-        .slice(0, 5)
+        // Timeout para evitar travamentos
+        const warmupTimeout = setTimeout(() => {
+          globalLogger.warn('Cache warmup timeout after 10 seconds')
+        }, 10000)
 
-      await Promise.all(
-        topUsers.map((user: MockUserType) => this.getUserDetailedStatistics(user._id))
-      )
+        // Carregar apenas estatísticas básicas rapidamente
+        await Promise.allSettled([
+          this.getGlobalStatistics(),
+          this.getRankingStatistics()
+        ])
 
-      console.log('✅ StatisticsCache: Warm-up concluído com sucesso')
-    } catch (error) {
-      console.error('❌ StatisticsCache: Erro no warm-up do cache:', error)
+        // Carregar estatísticas de usuários limitadas
+        const users = await mockUserDB.getAllUsers()
+        if (users.length > 0) {
+          const topUsers = users
+            .sort((a: MockUserType, b: MockUserType) => (b.statistics?.averageScore || 0) - (a.statistics?.averageScore || 0))
+            .slice(0, limit)
+
+          // Carregar em lotes menores para evitar sobrecarga
+          const batchSize = 2
+          for (let i = 0; i < topUsers.length; i += batchSize) {
+            const batch = topUsers.slice(i, i + batchSize)
+            await Promise.allSettled(
+              batch.map((user: MockUserType) => this.getUserDetailedStatistics(user._id))
+            )
+          }
+        }
+
+        clearTimeout(warmupTimeout)
+        globalLogger.info('Statistics cache warmup completed successfully')
+      } catch (error) {
+        const { globalLogger } = await import('../utils/logger')
+        globalLogger.error('Statistics cache warmup failed', error)
+      }
+    }
+
+    if (background) {
+      // Executar em background sem bloquear
+      executeWarmup().catch(() => {}) // Ignora erros em background
+    } else {
+      await executeWarmup()
     }
   }
 }

@@ -20,6 +20,22 @@ import {
   handleValidationErrors
 } from './middleware/security'
 
+// Advanced security middleware
+import {
+  setupSecurity,
+  deviceFingerprinting,
+  maliciousPatternDetection,
+  csrfProtection,
+  securityLogger
+} from './middleware/advancedSecurity'
+
+// Production monitoring
+import { 
+  monitoringMiddleware, 
+  healthCheckEndpoint, 
+  initializeMonitoring 
+} from './middleware/productionMonitoring'
+
 // Monitoring middleware imports
 import {
   requestLogger,
@@ -42,9 +58,28 @@ import { statisticsCacheService } from './services/StatisticsCacheService'
 
 const app = express()
 
-// Logging middleware (primeiro para capturar todas as requests)
+// Production monitoring (primeiro para capturar todas as métricas)
+if (process.env.NODE_ENV === 'production') {
+  app.use(monitoringMiddleware)
+}
+
+// Logging middleware
 app.use(morganLogger)
 app.use(requestLogger)
+
+// Advanced security setup
+setupSecurity(app, {
+  enableCSRF: false, // Desabilitado temporariamente para desenvolvimento
+  enableRateLimit: false, // Usaremos os rate limits existentes
+  enableSlowDown: true,
+  enableFingerprinting: true,
+  allowedOrigins: ['http://localhost:3000', 'http://localhost:5173']
+})
+
+// Additional security middlewares
+app.use(securityLogger)
+app.use(deviceFingerprinting)
+app.use(maliciousPatternDetection)
 
 // Security & Performance middleware
 app.use(securityMiddleware)
@@ -72,11 +107,10 @@ app.use('/api/questions', questionRoutes)
 app.use('/api/simulations', simulationRateLimit, simulationRoutes)
 app.use('/api/rankings', rankingRoutes)
 app.use('/api/ai', aiRoutes)
-// app.use('/api/questoes', questaoRoutes)
-// app.use('/api/ia-generativa', iaGenerativaRoutes)
 
-// Health check
-app.get('/api/health', (req, res) => {
+// Health check e monitoramento
+app.get('/api/health', healthCheckEndpoint)
+app.get('/api/health/simple', (req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
@@ -85,6 +119,9 @@ app.get('/api/health', (req, res) => {
     version: '1.0.0'
   })
 })
+
+// Métricas de monitoramento (usar o endpoint existente)
+app.get('/api/monitoring/metrics', metricsEndpoint)
 
 // Métricas do sistema (para monitoramento)
 app.get('/api/metrics', metricsEndpoint)
@@ -106,7 +143,7 @@ const startServer = async () => {
     // Rodando com MockDB apenas - não conectar ao MongoDB
     console.warn('⚠️  Rodando em modo de desenvolvimento com MockDB')
     
-    app.listen(PORT, async () => {
+    app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`)
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
       console.log(`🌐 API available at http://localhost:${PORT}/api`)
@@ -114,13 +151,18 @@ const startServer = async () => {
       console.log(`  📧 joao@teste.com (senha: 123456)`)
       console.log(`  📧 maria@teste.com (senha: senha123)`)
       
-      // Inicializar cache de estatísticas
-      console.log(`🔥 Iniciando warm-up do cache de estatísticas...`)
-      try {
-        await statisticsCacheService.warmupCache()
-        console.log(`✅ Cache de estatísticas inicializado com sucesso`)
-      } catch (cacheError) {
-        console.error(`❌ Erro ao inicializar cache de estatísticas:`, cacheError)
+      // Inicializar sistemas em background
+      if (process.env.NODE_ENV !== 'test') {
+        // Cache de estatísticas
+        statisticsCacheService.warmupCache({ 
+          background: true, 
+          limit: process.env.NODE_ENV === 'production' ? 5 : 2 
+        })
+        
+        // Sistema de monitoramento
+        if (process.env.NODE_ENV === 'production') {
+          initializeMonitoring()
+        }
       }
     })
   } catch (error) {

@@ -1,12 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createError = exports.notFound = exports.errorHandler = void 0;
+const logger_1 = require("../utils/logger");
 const errorHandler = (err, req, res, next) => {
     const statusCode = err.statusCode || 500;
     const message = err.message || 'Internal Server Error';
-    if (process.env.NODE_ENV === 'development') {
-        console.error('Error:', err);
-    }
+    const requestLogger = (0, logger_1.createRequestLogger)(req);
+    requestLogger.error('Application Error', err, {
+        statusCode,
+        path: req.path,
+        method: req.method
+    });
     res.status(statusCode).json({
         success: false,
         message,

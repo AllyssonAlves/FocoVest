@@ -123,13 +123,19 @@ export default function ProfilePage() {
             </div>
             {isEditingName ? (
               <div className="mb-4">
+                <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 mb-2 text-center">
+                  Editar nome
+                </label>
                 <input
                   type="text"
+                  id="edit-name"
+                  name="editName"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center"
                   placeholder="Digite seu nome"
                   disabled={isLoading}
+                  autoComplete="name"
                 />
                 <div className="flex justify-center space-x-2 mt-2">
                   <button

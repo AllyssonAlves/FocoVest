@@ -11,7 +11,10 @@ router.get('/', async (req, res) => {
     try {
         const filters = {
             page: parseInt(req.query.page) || 1,
-            limit: parseInt(req.query.limit) || 12
+            limit: parseInt(req.query.limit) || 12,
+            university: req.query.university,
+            subject: req.query.subject,
+            difficulty: req.query.difficulty
         };
         const result = await MockSimulationService_1.mockSimulationService.getSimulations(filters);
         return res.json(result);

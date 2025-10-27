@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
+import { globalLogger, createRequestLogger } from '../utils/logger'
 
 export interface ApiError extends Error {
   statusCode?: number
@@ -14,10 +15,13 @@ export const errorHandler = (
   const statusCode = err.statusCode || 500
   const message = err.message || 'Internal Server Error'
 
-  // Log error in development
-  if (process.env.NODE_ENV === 'development') {
-    console.error('Error:', err)
-  }
+  // Log estruturado do erro
+  const requestLogger = createRequestLogger(req)
+  requestLogger.error('Application Error', err, {
+    statusCode,
+    path: req.path,
+    method: req.method
+  })
 
   res.status(statusCode).json({
     success: false,

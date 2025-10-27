@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import { config } from '../config/database'
 import User, { IUser } from '../models/User'
 import { createError } from './errorHandler'
+import { tokenBlacklistService } from '../services/TokenBlacklistService'
 
 // Estender a interface Request para incluir o usuário
 export interface AuthRequest extends Request {
@@ -65,6 +66,16 @@ export const authenticateToken = async (
       res.status(401).json({
         success: false,
         message: 'Token de acesso requerido'
+      })
+      return
+    }
+
+    // Verificar se o token está na blacklist
+    if (tokenBlacklistService.isTokenBlacklisted(token)) {
+      res.status(401).json({
+        success: false,
+        message: 'Token foi invalidado. Faça login novamente.',
+        code: 'TOKEN_BLACKLISTED'
       })
       return
     }

@@ -61,6 +61,8 @@ export default function ThemeToggle({
     return (
       <div className={`relative ${className}`}>
         <select
+          id="theme-selector"
+          name="themeSelector"
           value={theme}
           onChange={(e) => setTheme(e.target.value as any)}
           className="

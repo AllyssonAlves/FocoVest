@@ -33,7 +33,7 @@ export const generalRateLimit = rateLimit({
 // Rate limiter específico para autenticação (mais restritivo)
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // máximo 5 tentativas de login por IP a cada 15 minutos
+  max: process.env.NODE_ENV === 'development' ? 100 : 5, // 100 em dev, 5 em prod
   message: {
     success: false,
     message: 'Muitas tentativas de login, tente novamente em 15 minutos.',
@@ -42,6 +42,14 @@ export const authRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Não contar requests bem-sucedidos
+  skip: (req: Request) => {
+    // Skip rate limiting em desenvolvimento para localhost
+    if (process.env.NODE_ENV === 'development' && 
+        (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip?.includes('localhost'))) {
+      return true
+    }
+    return false
+  },
   handler: (req: Request, res: Response) => {
     console.log(`🚨 Rate limit de auth atingido para IP: ${req.ip}`)
     res.status(429).json({

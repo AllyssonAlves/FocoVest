@@ -9,6 +9,10 @@ const MockUserService_1 = require("./MockUserService");
 const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const types_1 = require("../../../shared/dist/types");
+const TokenBlacklistService_1 = require("./TokenBlacklistService");
+const SessionService_1 = require("./SessionService");
+const SecurityNotificationService_1 = require("./SecurityNotificationService");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const isMongoAvailable = () => {
     try {
         const mongoose = require('mongoose');
@@ -67,7 +71,8 @@ class AuthService {
                 console.log('✅ AuthService: Usuário criado no MockDB');
             }
             const token = (0, auth_1.generateToken)(user);
-            console.log('🔑 AuthService: Token JWT gerado');
+            const refreshToken = this.generateRefreshToken(user);
+            console.log('🔑 AuthService: Tokens JWT e refresh gerados');
             const userResponse = {
                 _id: user._id,
                 name: user.name,
@@ -90,7 +95,9 @@ class AuthService {
                 message: 'Usuário registrado com sucesso.',
                 data: {
                     user: userResponse,
-                    token
+                    token,
+                    refreshToken,
+                    expiresIn: 24 * 60 * 60
                 }
             };
         }
@@ -102,7 +109,7 @@ class AuthService {
             throw error;
         }
     }
-    static async login(data) {
+    static async login(data, req) {
         try {
             const UserModel = isMongoAvailable() ? User_1.default : MockUserService_1.MockUser;
             console.log('🔑 AuthService: Iniciando login para:', data.email);
@@ -138,14 +145,33 @@ class AuthService {
                 console.log('❌ AuthService: Senha incorreta para:', data.email);
                 throw (0, errorHandler_1.createError)('Email ou senha incorretos', 401);
             }
-            console.log('✅ AuthService: Senha correta, gerando token...');
+            console.log('✅ AuthService: Senha correta, gerando tokens...');
             console.log('🔑 AuthService: Dados do usuário para token:', {
                 id: user._id,
                 email: user.email,
                 tipo_id: typeof user._id
             });
             const token = (0, auth_1.generateToken)(user);
-            console.log('🎟️  AuthService: Token gerado com payload para userId:', user._id);
+            const refreshToken = this.generateRefreshToken(user);
+            console.log('🎟️  AuthService: Tokens gerados para userId:', user._id);
+            if (req) {
+                const deviceInfo = data.deviceInfo || SessionService_1.SessionService.extractDeviceInfo(req);
+                const userId = user._id.toString();
+                await SessionService_1.SessionService.createSession(userId, deviceInfo, refreshToken);
+                console.log('📱 AuthService: Sessão criada para dispositivo');
+                const { isNewDevice, alert } = await SecurityNotificationService_1.SecurityNotificationService.checkNewDeviceLogin(userId, req);
+                if (isNewDevice && alert) {
+                    console.log('🔔 Novo dispositivo detectado, alerta de segurança criado');
+                }
+            }
+            if (isMongoAvailable()) {
+                user.lastLoginAt = new Date();
+                await user.save();
+            }
+            else {
+                const userId = user._id.toString();
+                await MockUserService_1.mockUserDB.findByIdAndUpdate(userId, { lastLoginAt: new Date() });
+            }
             const userResponse = {
                 _id: user._id,
                 name: user.name,
@@ -168,12 +194,17 @@ class AuthService {
                 message: 'Login realizado com sucesso',
                 data: {
                     user: userResponse,
-                    token
+                    token,
+                    refreshToken,
+                    expiresIn: data.rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60
                 }
             };
         }
         catch (error) {
             console.log('❌ AuthService: Erro no login:', error.message);
+            if (req && (error.message?.includes('incorretos') || error.message?.includes('não encontrado'))) {
+                await SecurityNotificationService_1.SecurityNotificationService.recordFailedLogin(data.email, req);
+            }
             throw error;
         }
     }
@@ -281,9 +312,22 @@ class AuthService {
             throw error;
         }
     }
-    static async refreshToken(user) {
+    static async refreshToken(user, oldToken) {
         try {
+            if (oldToken) {
+                try {
+                    const decoded = jsonwebtoken_1.default.decode(oldToken);
+                    if (decoded && decoded.exp) {
+                        const expiresAt = new Date(decoded.exp * 1000);
+                        TokenBlacklistService_1.tokenBlacklistService.blacklistToken(oldToken, user._id.toString(), expiresAt, 'logout');
+                    }
+                }
+                catch (error) {
+                    console.log('⚠️ Erro ao decodificar token antigo:', error);
+                }
+            }
             const token = (0, auth_1.generateToken)(user);
+            const refreshToken = this.generateRefreshToken(user);
             const userResponse = {
                 _id: user._id,
                 name: user.name,
@@ -305,12 +349,113 @@ class AuthService {
                 message: 'Token renovado com sucesso',
                 data: {
                     user: userResponse,
-                    token
+                    token,
+                    refreshToken,
+                    expiresIn: 24 * 60 * 60
                 }
             };
         }
         catch (error) {
             throw error;
+        }
+    }
+    static async logout(token, refreshToken, userId) {
+        try {
+            const decoded = jsonwebtoken_1.default.decode(token);
+            if (decoded && decoded.exp) {
+                const expiresAt = new Date(decoded.exp * 1000);
+                const userIdFromToken = decoded.userId || userId;
+                TokenBlacklistService_1.tokenBlacklistService.blacklistToken(token, userIdFromToken, expiresAt, 'logout');
+                if (refreshToken) {
+                    await SessionService_1.SessionService.invalidateSessionByRefreshToken(refreshToken);
+                    console.log('🔄 Sessão invalidada via refresh token');
+                }
+            }
+            return {
+                success: true,
+                message: 'Logout realizado com sucesso'
+            };
+        }
+        catch (error) {
+            console.log('⚠️ Erro no logout:', error);
+            return {
+                success: true,
+                message: 'Logout realizado com sucesso'
+            };
+        }
+    }
+    static async logoutAllDevices(userId) {
+        try {
+            await SessionService_1.SessionService.invalidateAllUserSessions(userId);
+            TokenBlacklistService_1.tokenBlacklistService.blacklistAllUserTokens(userId, 'security');
+            console.log('🚪 Logout de todos os dispositivos para usuário:', userId);
+            return {
+                success: true,
+                message: 'Logout realizado em todos os dispositivos'
+            };
+        }
+        catch (error) {
+            console.log('⚠️ Erro no logout de todos os dispositivos:', error);
+            return {
+                success: false,
+                message: 'Erro ao fazer logout de todos os dispositivos'
+            };
+        }
+    }
+    static async getUserSessions(userId) {
+        try {
+            const sessions = await SessionService_1.SessionService.findUserActiveSessions(userId);
+            const stats = await SessionService_1.SessionService.getSessionStats(userId);
+            return {
+                success: true,
+                data: {
+                    activeSessions: sessions.map(session => ({
+                        deviceId: session.deviceInfo.id,
+                        browser: session.deviceInfo.browser,
+                        os: session.deviceInfo.os,
+                        ip: session.deviceInfo.ip,
+                        lastActivity: session.deviceInfo.lastActivity,
+                        createdAt: session.deviceInfo.createdAt
+                    })),
+                    stats
+                }
+            };
+        }
+        catch (error) {
+            console.log('⚠️ Erro ao obter sessões do usuário:', error);
+            return {
+                success: false
+            };
+        }
+    }
+    static async validateRefreshToken(refreshToken) {
+        try {
+            const decoded = (0, auth_1.verifyToken)(refreshToken);
+            if (!decoded || !decoded.userId) {
+                return null;
+            }
+            const UserModel = isMongoAvailable() ? User_1.default : MockUserService_1.MockUser;
+            const user = await UserModel.findById(decoded.userId);
+            return user;
+        }
+        catch (error) {
+            return null;
+        }
+    }
+    static generateRefreshToken(user) {
+        const JWT_SECRET = process.env.JWT_SECRET || 'focovest-secret-key-2024';
+        return jsonwebtoken_1.default.sign({
+            userId: user._id,
+            type: 'refresh'
+        }, JWT_SECRET, { expiresIn: '30d' });
+    }
+    static async securityLogout(userId, reason = 'Atividade suspeita') {
+        try {
+            TokenBlacklistService_1.tokenBlacklistService.blacklistAllUserTokens(userId, 'security');
+            console.log(`🚨 Logout de segurança executado para usuário ${userId}: ${reason}`);
+        }
+        catch (error) {
+            console.error('❌ Erro no logout de segurança:', error);
         }
     }
 }

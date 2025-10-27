@@ -323,20 +323,20 @@ export const cacheService = new AdvancedCacheService({
   cleanupInterval: 120 // Limpeza a cada 2 minutos
 })
 
-// Configurar logs de eventos para desenvolvimento
-if (process.env.NODE_ENV === 'development') {
-  cacheService.on('hit', ({ key }) => {
-    console.log(`📈 Cache HIT: ${key}`)
-  })
+// Configurar logs estruturados de eventos de cache
+import { globalLogger } from '../utils/logger'
 
-  cacheService.on('miss', ({ key }) => {
-    console.log(`📉 Cache MISS: ${key}`)
-  })
+cacheService.on('hit', ({ key }) => {
+  globalLogger.cacheEvent('hit', key)
+})
 
-  cacheService.on('evicted', ({ key, reason }) => {
-    console.log(`🗑️  Cache EVICTED: ${key} (reason: ${reason})`)
-  })
-}
+cacheService.on('miss', ({ key }) => {
+  globalLogger.cacheEvent('miss', key)
+})
+
+cacheService.on('evicted', ({ key, reason }) => {
+  globalLogger.cacheEvent('evicted', key, { reason })
+})
 
 export default AdvancedCacheService
 export type { CacheConfig, CacheMetrics, CacheEvents }

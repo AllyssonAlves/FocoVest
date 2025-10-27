@@ -93,17 +93,20 @@ export default function QuestionsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {/* Busca */}
           <div className="lg:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="search-questions" className="block text-sm font-medium text-gray-700 mb-1">
               Buscar
             </label>
             <div className="flex space-x-2">
               <input
                 type="text"
+                id="search-questions"
+                name="searchQuestions"
                 placeholder="Buscar por título, enunciado ou explicação..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                autoComplete="off"
               />
               <button
                 onClick={handleSearch}
@@ -116,10 +119,12 @@ export default function QuestionsPage() {
 
           {/* Matéria */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="filter-subject" className="block text-sm font-medium text-gray-700 mb-1">
               Matéria
             </label>
             <select
+              id="filter-subject"
+              name="filterSubject"
               value={filters.subject || ''}
               onChange={(e) => handleFilterChange('subject', e.target.value || undefined)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -133,10 +138,12 @@ export default function QuestionsPage() {
 
           {/* Universidade */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="filter-university-questions" className="block text-sm font-medium text-gray-700 mb-1">
               Universidade
             </label>
             <select
+              id="filter-university-questions"
+              name="filterUniversityQuestions"
               value={filters.university || ''}
               onChange={(e) => handleFilterChange('university', e.target.value || undefined)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -152,10 +159,12 @@ export default function QuestionsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Dificuldade */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="filter-difficulty" className="block text-sm font-medium text-gray-700 mb-1">
               Dificuldade
             </label>
             <select
+              id="filter-difficulty"
+              name="filterDifficulty"
               value={filters.difficulty || ''}
               onChange={(e) => handleFilterChange('difficulty', e.target.value || undefined)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -171,10 +180,12 @@ export default function QuestionsPage() {
 
           {/* Questões por página */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="filter-limit" className="block text-sm font-medium text-gray-700 mb-1">
               Por página
             </label>
             <select
+              id="filter-limit"
+              name="filterLimit"
               value={filters.limit || 10}
               onChange={(e) => handleFilterChange('limit', parseInt(e.target.value))}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"

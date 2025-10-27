@@ -12,7 +12,11 @@
     "shared"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "dev": "concurrently --kill-others --prefix-colors \"bgBlue.bold,bgMagenta.bold\" --names \"SERVER,CLIENT\" \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:verbose": "concurrently --kill-others --prefix-colors \"bgBlue.bold,bgMagenta.bold\" --names \"SERVER,CLIENT\" --timestamp-format \"HH:mm:ss\" \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:server-only": "cd server && npm run dev",
+    "dev:client-only": "cd client && npm run dev",
+    "dev:setup": "npm run install:all && npm run dev",
     "server:dev": "cd server && npm run dev",
     "client:dev": "cd client && npm run dev",
     "build": "npm run build:shared && npm run build:client && npm run build:server",
@@ -28,7 +32,7 @@
     "install:shared": "cd shared && npm install",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
     "docker:prod": "docker-compose -f docker-compose.yml up --build",
-    "predeploy": "npm run build",
+    "predeploy": "npm run build:client",
     "deploy": "gh-pages -d client/dist"
   },
   "devDependencies": {

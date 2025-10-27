@@ -1,6 +1,3 @@
-# FocoVest
-FocoVest A plataforma de simulados que te prepara para o ENEM e vestibulares UVA, UECE, UFC, URCA e IFCE  Compete com outros estudantes, acompanhe seu progresso e conquiste sua vaga na universidade dos seus sonhos!
-=======
 # 🎯 FocoVest - Plataforma de Simulados
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
@@ -27,7 +24,45 @@ O **FocoVest** é uma plataforma inovadora que visa revolucionar a preparação 
 - **UECE** - Universidade Estadual do Ceará  
 - **UFC** - Universidade Federal do Ceará
 - **URCA** - Universidade Regional do Cariri
-- **IFCE** - Instituto Federal do Ceará
+- **IFCE** - Instituto Federal de Educação, Ciência e Tecnologia do Ceará
+
+## 🚀 Início Rápido
+
+### ⚡ Setup Automático (Recomendado)
+
+**Windows:**
+```bash
+# Clonar e executar
+git clone https://github.com/AllyssonAlves/FocoVest.git
+cd FocoVest
+setup.bat
+```
+
+**Linux/Mac:**
+```bash
+# Clonar e executar
+git clone https://github.com/AllyssonAlves/FocoVest.git
+cd FocoVest
+chmod +x setup.sh
+./setup.sh
+```
+
+### 🔧 Setup Manual
+
+1. **Pré-requisitos**: Node.js 18+
+2. **Instalar dependências**: `npm run install:all`
+3. **Executar projeto**: `npm run dev`
+4. **Acessar**: http://localhost:5173
+
+### 🔑 Credenciais de Teste
+
+| Email | Senha | Tipo |
+|-------|--------|------|
+| `joao@teste.com` | `123456` | Usuário |
+| `maria@teste.com` | `senha123` | Usuário |
+| `allissonalvesvjt@gmail.com` | `123456` | Admin |
+
+📖 **[Guia Completo de Instalação](COMO_RODAR.md)**
 
 ## 🚀 Tecnologias Utilizadas
 
@@ -279,5 +314,9 @@ Se este projeto te ajudou, dê uma ⭐️!
 <div align="center">
   <p>Feito com ❤️ para estudantes brasileiros</p>
   <p>© 2024 FocoVest. Todos os direitos reservados.</p>
+<<<<<<< HEAD
 </div>
 >>>>>>> 59d6ceb ( FocoVest: Deploy completo com dark mode e segurança implementados)
+=======
+</div>
+>>>>>>> 376e361 (Primeiro commit do projeto FocoVest)

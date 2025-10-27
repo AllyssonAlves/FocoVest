@@ -4,154 +4,106 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const Question_1 = __importDefault(require("../models/Question"));
 const auth_1 = require("../middleware/auth");
-const MockQuestionService_1 = require("../services/MockQuestionService");
+const HybridQuestionService_1 = __importDefault(require("../services/HybridQuestionService"));
 const router = (0, express_1.Router)();
+const questionService = new HybridQuestionService_1.default();
 router.get('/', async (req, res) => {
     try {
-        const { subject, university, difficulty, topics, search, page = '1', limit = '10' } = req.query;
-        if (process.env.NODE_ENV === 'development') {
-            const result = await MockQuestionService_1.mockQuestionService.getQuestions({
-                subject,
-                university,
-                difficulty: difficulty,
-                topics: topics ? topics.split(',') : undefined,
-                search,
-                page: parseInt(page),
-                limit: parseInt(limit)
-            });
-            return res.json({
-                success: true,
-                data: result.questions,
-                pagination: {
-                    currentPage: result.currentPage,
-                    totalPages: result.totalPages,
-                    totalQuestions: result.totalQuestions,
-                    hasNext: result.hasNext,
-                    hasPrev: result.hasPrev
-                }
-            });
+        const page = parseInt(req.query.page || '1');
+        const limit = parseInt(req.query.limit || '20');
+        const filters = {};
+        if (req.query.subject) {
+            filters.subject = req.query.subject;
         }
-        const filters = { isActive: true };
-        if (subject)
-            filters.subject = subject;
-        if (university)
-            filters.university = university;
-        if (difficulty)
-            filters.difficulty = difficulty;
-        if (topics)
-            filters.topics = { $in: topics.split(',') };
-        if (search) {
-            filters.$or = [
-                { title: { $regex: search, $options: 'i' } },
-                { statement: { $regex: search, $options: 'i' } },
-                { explanation: { $regex: search, $options: 'i' } }
-            ];
+        if (req.query.university) {
+            filters.university = req.query.university;
         }
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const skip = (pageNum - 1) * limitNum;
-        const [questions, totalQuestions] = await Promise.all([
-            Question_1.default.find(filters)
-                .select('-__v')
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .populate('createdBy', 'name email'),
-            Question_1.default.countDocuments(filters)
-        ]);
-        const totalPages = Math.ceil(totalQuestions / limitNum);
+        if (req.query.difficulty) {
+            filters.difficulty = req.query.difficulty;
+        }
+        if (req.query.topics) {
+            filters.topics = req.query.topics.split(',');
+        }
+        console.log('🔍 Filtros aplicados:', filters);
+        const result = await questionService.getQuestions(filters, page, limit);
+        console.log('📊 Resultado da busca:', {
+            total: result.totalQuestions,
+            page: result.currentPage,
+            totalPages: result.totalPages
+        });
         return res.json({
             success: true,
-            data: questions,
-            pagination: {
-                currentPage: pageNum,
-                totalPages,
-                totalQuestions,
-                hasNext: pageNum < totalPages,
-                hasPrev: pageNum > 1
-            }
+            data: result
         });
     }
     catch (error) {
-        console.error('Error fetching questions:', error);
+        console.error('❌ Erro ao buscar questões:', error);
         return res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
+            error: 'Erro interno do servidor',
+            details: error.message
         });
     }
 });
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        console.log('🔍 Buscando questão com ID:', id);
-        if (process.env.NODE_ENV === 'development') {
-            const question = await MockQuestionService_1.mockQuestionService.getQuestionById(id);
-            if (!question) {
-                console.log('❌ Questão não encontrada:', id);
-                return res.status(404).json({
-                    success: false,
-                    message: 'Questão não encontrada'
-                });
-            }
-            const correctAlternative = question.alternatives.find(alt => alt.isCorrect);
-            const questionWithCorrectAnswer = {
-                ...question.toObject ? question.toObject() : question,
-                correctAnswer: correctAlternative?.letter || null
-            };
-            console.log('✅ Questão encontrada:', question.title || question._id);
-            console.log('🎯 Resposta correta:', correctAlternative?.letter);
-            return res.json({
-                success: true,
-                data: questionWithCorrectAnswer
-            });
-        }
-        const question = await Question_1.default.findById(id)
-            .select('-__v')
-            .populate('createdBy', 'name email');
-        if (!question || !question.isActive) {
+        console.log('🔍 Buscando questão ID:', id);
+        const question = await questionService.getQuestionById(id);
+        if (!question) {
             return res.status(404).json({
                 success: false,
                 message: 'Questão não encontrada'
             });
         }
-        const correctAlternative = question.alternatives.find(alt => alt.isCorrect);
-        const correctAnswer = correctAlternative?.letter || null;
-        console.log(`[Question ${question._id}] Correct answer detected:`, correctAnswer);
-        const questionWithCorrectAnswer = {
-            ...question.toObject(),
-            correctAnswer
+        const questionData = question;
+        const alternatives = questionData.alternatives || questionData.alternativas || [];
+        const correctAnswer = alternatives.find((alt) => alt.isCorrect || alt.correta);
+        const responseData = {
+            ...questionData,
+            correctAnswer: correctAnswer?.letter || correctAnswer?.id || null
         };
+        console.log('✅ Questão encontrada:', questionData.title || questionData._id);
+        console.log('🎯 Resposta correta:', correctAnswer?.letter || correctAnswer?.id);
         return res.json({
             success: true,
-            data: questionWithCorrectAnswer
+            data: responseData
         });
     }
     catch (error) {
-        console.error('Error fetching question:', error);
+        console.error('❌ Erro ao buscar questão:', error);
         return res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
+            error: 'Erro interno do servidor',
+            details: error.message
         });
     }
 });
 router.post('/', auth_1.requireAuth, async (req, res) => {
     try {
+        const userId = req.user.id;
         const questionData = {
-            ...req.body,
-            createdBy: req.user?._id
+            title: req.body.title,
+            enunciado: req.body.enunciado,
+            alternativas: req.body.alternativas,
+            gabarito: req.body.gabarito,
+            explanation: req.body.explanation,
+            subject: req.body.subject,
+            difficulty: req.body.difficulty,
+            university: req.body.university,
+            topics: req.body.topics || [],
+            year: req.body.year,
+            createdBy: userId
         };
-        if (process.env.NODE_ENV === 'development') {
-            const question = await MockQuestionService_1.mockQuestionService.createQuestion(questionData);
-            return res.status(201).json({
-                success: true,
-                data: question,
-                message: 'Questão criada com sucesso'
+        if (!questionData.title || !questionData.enunciado || !questionData.alternativas ||
+            !questionData.gabarito || !questionData.subject) {
+            return res.status(400).json({
+                success: false,
+                message: 'Campos obrigatórios: title, enunciado, alternativas, gabarito, subject'
             });
         }
-        const question = new Question_1.default(questionData);
-        await question.save();
+        console.log('📝 Criando nova questão:', questionData.title);
+        const question = await questionService.createQuestion(questionData);
+        console.log('✅ Questão criada com sucesso:', question);
         return res.status(201).json({
             success: true,
             data: question,
@@ -159,59 +111,26 @@ router.post('/', auth_1.requireAuth, async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error creating question:', error);
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({
-                success: false,
-                message: 'Dados inválidos',
-                errors: Object.values(error.errors).map((err) => err.message)
-            });
-        }
+        console.error('❌ Erro ao criar questão:', error);
         return res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
+            error: 'Erro interno do servidor',
+            details: error.message
         });
     }
 });
 router.put('/:id', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user?._id?.toString();
-        if (process.env.NODE_ENV === 'development') {
-            if (!userId) {
-                return res.status(401).json({
-                    success: false,
-                    message: 'Usuário não autenticado'
-                });
-            }
-            const question = await MockQuestionService_1.mockQuestionService.updateQuestion(id, req.body, userId);
-            if (!question) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Questão não encontrada'
-                });
-            }
-            return res.json({
-                success: true,
-                data: question,
-                message: 'Questão atualizada com sucesso'
-            });
-        }
-        const question = await Question_1.default.findById(id);
-        if (!question || !question.isActive) {
+        const userId = req.user.id;
+        console.log('📝 Atualizando questão ID:', id);
+        const question = await questionService.updateQuestion(id, req.body, userId);
+        if (!question) {
             return res.status(404).json({
                 success: false,
                 message: 'Questão não encontrada'
             });
         }
-        if (question.createdBy.toString() !== userId) {
-            return res.status(403).json({
-                success: false,
-                message: 'Não autorizado para editar esta questão'
-            });
-        }
-        Object.assign(question, req.body);
-        await question.save();
+        console.log('✅ Questão atualizada com sucesso');
         return res.json({
             success: true,
             data: question,
@@ -219,113 +138,54 @@ router.put('/:id', auth_1.requireAuth, async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error updating question:', error);
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({
-                success: false,
-                message: 'Dados inválidos',
-                errors: Object.values(error.errors).map((err) => err.message)
-            });
-        }
+        console.error('❌ Erro ao atualizar questão:', error);
         return res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
+            error: 'Erro interno do servidor',
+            details: error.message
         });
     }
 });
 router.delete('/:id', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user?._id?.toString();
-        if (process.env.NODE_ENV === 'development') {
-            if (!userId) {
-                return res.status(401).json({
-                    success: false,
-                    message: 'Usuário não autenticado'
-                });
-            }
-            const success = await MockQuestionService_1.mockQuestionService.deleteQuestion(id, userId);
-            if (!success) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Questão não encontrada'
-                });
-            }
-            return res.json({
-                success: true,
-                message: 'Questão removida com sucesso'
-            });
-        }
-        const question = await Question_1.default.findById(id);
-        if (!question || !question.isActive) {
+        const userId = req.user.id;
+        console.log('🗑️  Removendo questão ID:', id);
+        const success = await questionService.deleteQuestion(id, userId);
+        if (!success) {
             return res.status(404).json({
                 success: false,
                 message: 'Questão não encontrada'
             });
         }
-        if (question.createdBy.toString() !== userId) {
-            return res.status(403).json({
-                success: false,
-                message: 'Não autorizado para remover esta questão'
-            });
-        }
-        question.isActive = false;
-        await question.save();
+        console.log('✅ Questão removida com sucesso');
         return res.json({
             success: true,
             message: 'Questão removida com sucesso'
         });
     }
     catch (error) {
-        console.error('Error deleting question:', error);
+        console.error('❌ Erro ao remover questão:', error);
         return res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
+            error: 'Erro interno do servidor',
+            details: error.message
         });
     }
 });
-router.get('/stats/summary', async (req, res) => {
+router.get('/stats/overview', async (req, res) => {
     try {
-        if (process.env.NODE_ENV === 'development') {
-            const stats = await MockQuestionService_1.mockQuestionService.getQuestionStats();
-            return res.json({
-                success: true,
-                data: stats
-            });
-        }
-        const [totalQuestions, questionsBySubject, questionsByUniversity, questionsByDifficulty] = await Promise.all([
-            Question_1.default.countDocuments({ isActive: true }),
-            Question_1.default.aggregate([
-                { $match: { isActive: true } },
-                { $group: { _id: '$subject', count: { $sum: 1 } } },
-                { $sort: { count: -1 } }
-            ]),
-            Question_1.default.aggregate([
-                { $match: { isActive: true } },
-                { $group: { _id: '$university', count: { $sum: 1 } } },
-                { $sort: { count: -1 } }
-            ]),
-            Question_1.default.aggregate([
-                { $match: { isActive: true } },
-                { $group: { _id: '$difficulty', count: { $sum: 1 } } },
-                { $sort: { count: -1 } }
-            ])
-        ]);
+        console.log('📊 Buscando estatísticas das questões...');
+        const stats = await questionService.getQuestionStats();
+        console.log('✅ Estatísticas calculadas:', stats);
         return res.json({
             success: true,
-            data: {
-                totalQuestions,
-                bySubject: questionsBySubject,
-                byUniversity: questionsByUniversity,
-                byDifficulty: questionsByDifficulty
-            }
+            data: stats
         });
     }
     catch (error) {
-        console.error('Error fetching question stats:', error);
+        console.error('❌ Erro ao calcular estatísticas:', error);
         return res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
+            error: 'Erro interno do servidor',
+            details: error.message
         });
     }
 });

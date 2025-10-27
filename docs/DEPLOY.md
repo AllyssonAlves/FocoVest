@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🚀 Deploy Guide - GitHub Pages
 
 ## 📋 Pré-requisitos
@@ -173,6 +174,58 @@ git push origin main
 ---
 
 **🎉 Pronto! Sua aplicação está no ar com segurança máxima!**
+=======
+# 🚀 Guia Completo de Deploy - FocoVest Platform
+
+## 📋 Índice
+
+1. [Pré-requisitos](#pré-requisitos)
+2. [Configuração do Ambiente](#configuração-do-ambiente)
+3. [Deploy Local (Desenvolvimento)](#deploy-local-desenvolvimento)
+4. [Deploy em Produção](#deploy-em-produção)
+5. [Monitoramento e Operação](#monitoramento-e-operação)
+6. [Backup e Recuperação](#backup-e-recuperação)
+7. [Solução de Problemas](#solução-de-problemas)
+8. [Segurança](#segurança)
+
+---
+
+## 🔧 Pré-requisitos
+
+### Sistema Operacional
+- **Desenvolvimento**: Windows, macOS ou Linux
+- **Produção**: Ubuntu 20.04+ LTS (recomendado) ou CentOS 8+
+
+### Software Necessário
+
+#### Desenvolvimento
+```bash
+# Node.js e npm
+Node.js 18.x ou superior
+npm 8.x ou superior
+
+# Git
+Git 2.30 ou superior
+```
+
+#### Produção
+```bash
+# Docker e Docker Compose
+Docker 20.10 ou superior
+Docker Compose 2.x ou superior
+
+# Nginx (se não usar Docker)
+Nginx 1.18 ou superior
+
+# Certificado SSL
+Certificado SSL válido para HTTPS
+```
+
+### Recursos Mínimos
+
+#### Desenvolvimento
+- **CPU**: 2 cores
+>>>>>>> 376e361 (Primeiro commit do projeto FocoVest)
 - **RAM**: 4GB
 - **Disco**: 10GB livre
 

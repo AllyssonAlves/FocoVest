@@ -1,0 +1,51 @@
+{
+  "extends": [
+    "@typescript-eslint/recommended",
+    "@typescript-eslint/recommended-requiring-type-checking"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": "./tsconfig.json",
+    "tsconfigRootDir": "."
+  },
+  "plugins": ["@typescript-eslint"],
+  "root": true,
+  "rules": {
+    // TypeScript específicas
+    "@typescript-eslint/no-unused-vars": "error",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/explicit-function-return-type": "warn",
+    "@typescript-eslint/no-inferrable-types": "off",
+    "@typescript-eslint/prefer-const": "error",
+    "@typescript-eslint/no-var-requires": "error",
+    
+    // Qualidade geral
+    "no-console": "warn",
+    "no-debugger": "error",
+    "no-unused-expressions": "error",
+    "prefer-const": "error",
+    "no-var": "error",
+    
+    // Imports
+    "no-duplicate-imports": "error",
+    
+    // Estilo e formatação
+    "indent": ["error", 2],
+    "quotes": ["error", "single"],
+    "semi": ["error", "never"],
+    "comma-dangle": ["error", "never"],
+    
+    // Performance
+    "no-await-in-loop": "warn",
+    
+    // Segurança
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error"
+  },
+  "ignorePatterns": [
+    "dist/**/*",
+    "node_modules/**/*",
+    "*.js"
+  ]
+}

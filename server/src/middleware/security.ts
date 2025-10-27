@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import helmet from 'helmet'
-import { body, validationResult, query, param } from 'express-validator'
+import { SecureValidator, validate, ValidationError } from './secureValidation'
+import { createRequestLogger } from '../utils/logger'
 
 // Configuração do Helmet para segurança
 export const securityMiddleware = helmet({
@@ -36,141 +37,131 @@ export const securityMiddleware = helmet({
   xssFilter: true
 })
 
-// Middleware para validação de entrada
-export const handleValidationErrors = (req: Request, res: Response, next: NextFunction): void => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    res.status(400).json({
-      success: false,
-      message: 'Dados inválidos fornecidos',
-      errors: errors.array().map(error => ({
-        field: error.type === 'field' ? error.path : 'unknown',
-        message: error.msg,
-        value: error.type === 'field' ? error.value : undefined
-      }))
-    })
-    return
+// Middleware para validação de entrada usando o sistema seguro
+export const handleValidationErrors = (errors: ValidationError[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (errors.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Dados inválidos fornecidos',
+        errors: errors.map(error => ({
+          field: error.field,
+          message: error.message,
+          value: error.value
+        }))
+      })
+      return
+    }
+    next()
   }
-  next()
 }
 
-// Validações para registro
-export const validateRegister = [
-  body('name')
-    .trim()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Nome deve ter entre 2 e 100 caracteres')
-    .matches(/^[a-zA-ZÀ-ÿ\s]+$/)
-    .withMessage('Nome deve conter apenas letras e espaços'),
-  
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Email deve ter um formato válido')
-    .isLength({ max: 255 })
-    .withMessage('Email muito longo'),
-  
-  body('password')
-    .isLength({ min: 8, max: 128 })
-    .withMessage('Senha deve ter entre 8 e 128 caracteres')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Senha deve conter pelo menos: 1 letra minúscula, 1 maiúscula e 1 número'),
-  
-  body('university')
-    .optional()
-    .isIn(['UVA', 'UECE', 'UFC', 'URCA', 'IFCE', 'ENEM'])
-    .withMessage('Universidade deve ser uma das opções válidas'),
-  
-  body('course')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Curso deve ter no máximo 100 caracteres'),
-  
-  body('graduationYear')
-    .optional()
-    .isInt({ min: new Date().getFullYear(), max: new Date().getFullYear() + 10 })
-    .withMessage('Ano de graduação deve estar entre o ano atual e 10 anos no futuro'),
-  
-  handleValidationErrors
-]
+// Validações para registro usando sistema seguro
+export const validateRegister = validate(
+  new SecureValidator()
+    .field('name').required().isString().minLength(2).maxLength(100).matches(/^[a-zA-ZÀ-ÿ\s]+$/).build()
+    .field('email').required().isEmail().maxLength(255).build()
+    .field('password').required().isPassword().minLength(8).maxLength(128).build()
+    .field('university').optional().isString().custom((value) => {
+      const valid = ['UVA', 'UECE', 'UFC', 'URCA', 'IFCE', 'ENEM']
+      return !value || valid.includes(value) || 'Universidade deve ser uma das opções válidas'
+    }).build()
+    .field('course').optional().isString().maxLength(100).build()
+    .field('graduationYear').optional().isNumber().custom((value) => {
+      const currentYear = new Date().getFullYear()
+      const num = Number(value)
+      return !value || (num >= currentYear && num <= currentYear + 10) || 
+        'Ano de graduação deve estar entre o ano atual e 10 anos no futuro'
+    }).build()
+)
 
-// Validações para login
-export const validateLogin = [
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Email deve ter um formato válido'),
-  
-  body('password')
-    .notEmpty()
-    .withMessage('Senha é obrigatória')
-    .isLength({ max: 128 })
-    .withMessage('Senha muito longa'),
-  
-  handleValidationErrors
-]
+// Validações para login usando sistema seguro
+export const validateLogin = validate(
+  new SecureValidator()
+    .field('email').required().isEmail().build()
+    .field('password').required().isString().minLength(6).maxLength(128).build()
+    .field('rememberMe').optional().isBoolean().build()
+    .field('deviceInfo').optional().custom((value: any) => {
+      if (value && typeof value === 'object') {
+        const { userAgent, platform, language, browser, os, ip } = value
+        
+        // Validar strings básicas
+        if (userAgent && (typeof userAgent !== 'string' || userAgent.length > 500)) {
+          return 'UserAgent deve ser uma string válida (máximo 500 caracteres)'
+        }
+        if (platform && (typeof platform !== 'string' || platform.length > 100)) {
+          return 'Platform deve ser uma string válida (máximo 100 caracteres)'
+        }
+        if (language && (typeof language !== 'string' || language.length > 20)) {
+          return 'Language deve ser uma string válida (máximo 20 caracteres)'
+        }
+        if (browser && (typeof browser !== 'string' || browser.length > 100)) {
+          return 'Browser deve ser uma string válida (máximo 100 caracteres)'
+        }
+        if (os && (typeof os !== 'string' || os.length > 100)) {
+          return 'OS deve ser uma string válida (máximo 100 caracteres)'
+        }
+        if (ip && (typeof ip !== 'string' || ip.length > 45)) {
+          return 'IP deve ser uma string válida (máximo 45 caracteres)'
+        }
+        
+        return true
+      }
+      return true
+    }).build()
+)
 
-// Validações para simulados
-export const validateSimulationCreation = [
-  body('title')
-    .trim()
-    .isLength({ min: 3, max: 200 })
-    .withMessage('Título deve ter entre 3 e 200 caracteres'),
-  
-  body('description')
-    .trim()
-    .isLength({ min: 10, max: 1000 })
-    .withMessage('Descrição deve ter entre 10 e 1000 caracteres'),
-  
-  body('settings.timeLimit')
-    .isInt({ min: 1, max: 600 })
-    .withMessage('Tempo limite deve estar entre 1 e 600 minutos'),
-  
-  body('settings.questionsCount')
-    .isInt({ min: 1, max: 200 })
-    .withMessage('Número de questões deve estar entre 1 e 200'),
-  
-  body('settings.subjects')
-    .isArray({ min: 1 })
-    .withMessage('Pelo menos uma matéria deve ser selecionada'),
-  
-  body('settings.universities')
-    .isArray({ min: 1 })
-    .withMessage('Pelo menos uma universidade deve ser selecionada'),
-  
-  handleValidationErrors
-]
+// Validações para simulados usando sistema seguro
+export const validateSimulationCreation = validate(
+  new SecureValidator()
+    .field('title').required().isString().minLength(3).maxLength(200).build()
+    .field('description').required().isString().minLength(10).maxLength(1000).build()
+    .field('settings').required().custom((settings) => {
+      if (!settings || typeof settings !== 'object') return 'Settings é obrigatório'
+      
+      const timeLimit = Number(settings.timeLimit)
+      if (!timeLimit || timeLimit < 1 || timeLimit > 600) {
+        return 'Tempo limite deve estar entre 1 e 600 minutos'
+      }
+      
+      const questionsCount = Number(settings.questionsCount)
+      if (!questionsCount || questionsCount < 1 || questionsCount > 200) {
+        return 'Número de questões deve estar entre 1 e 200'
+      }
+      
+      if (!Array.isArray(settings.subjects) || settings.subjects.length === 0) {
+        return 'Pelo menos uma matéria deve ser selecionada'
+      }
+      
+      if (!Array.isArray(settings.universities) || settings.universities.length === 0) {
+        return 'Pelo menos uma universidade deve ser selecionada'
+      }
+      
+      return true
+    }).build()
+)
 
-// Validação de IDs
-export const validateId = [
-  param('id')
+// Validação de IDs usando sistema seguro
+export const validateId = validate(
+  new SecureValidator()
+    .field('id').required().isString()
     .matches(/^[0-9a-fA-F]{24}$|^mock_\d+$|^\d+$/)
-    .withMessage('ID inválido'),
-  
-  handleValidationErrors
-]
+    .build()
+)
 
-// Validação de consultas
-export const validateQuery = [
-  query('page')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('Página deve ser um número positivo'),
-  
-  query('limit')
-    .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage('Limite deve estar entre 1 e 100'),
-  
-  query('search')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Busca deve ter no máximo 100 caracteres'),
-  
-  handleValidationErrors
-]
+// Validação de consultas usando sistema seguro
+export const validateQuery = validate(
+  new SecureValidator()
+    .field('page').optional().isNumber().custom((value) => {
+      const num = Number(value)
+      return !value || num >= 1 || 'Página deve ser um número positivo'
+    }).build()
+    .field('limit').optional().isNumber().custom((value) => {
+      const num = Number(value)
+      return !value || (num >= 1 && num <= 100) || 'Limite deve estar entre 1 e 100'
+    }).build()
+    .field('search').optional().isString().maxLength(100).build()
+)
 
 // Middleware para sanitização de dados
 export const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
@@ -223,11 +214,13 @@ export const securityLogger = (req: Request, res: Response, next: NextFunction) 
   }
 
   if (req.body && checkSuspicious(req.body)) {
-    console.log(`🚨 Tentativa suspeita detectada - IP: ${req.ip}, Path: ${req.path}, Body:`, req.body)
+    const requestLogger = createRequestLogger(req)
+    requestLogger.securityEvent('Suspicious request body detected', 'medium', { body: req.body })
   }
 
   if (req.query && checkSuspicious(req.query)) {
-    console.log(`🚨 Query suspeita detectada - IP: ${req.ip}, Path: ${req.path}, Query:`, req.query)
+    const requestLogger = createRequestLogger(req)
+    requestLogger.securityEvent('Suspicious query detected', 'medium', { query: req.query })
   }
 
   next()

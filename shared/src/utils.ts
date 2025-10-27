@@ -214,7 +214,10 @@ export const storage = {
     try {
       localStorage.setItem(key, JSON.stringify(value))
     } catch (error) {
-      console.warn('Failed to save to localStorage:', error)
+      // Silenciar erros de localStorage em produção
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.warn('Failed to save to localStorage:', error)
+      }
     }
   },
   
@@ -223,7 +226,9 @@ export const storage = {
       const item = localStorage.getItem(key)
       return item ? JSON.parse(item) : null
     } catch (error) {
-      console.warn('Failed to read from localStorage:', error)
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.warn('Failed to read from localStorage:', error)
+      }
       return null
     }
   },
@@ -232,7 +237,9 @@ export const storage = {
     try {
       localStorage.removeItem(key)
     } catch (error) {
-      console.warn('Failed to remove from localStorage:', error)
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.warn('Failed to remove from localStorage:', error)
+      }
     }
   },
   
@@ -240,7 +247,9 @@ export const storage = {
     try {
       localStorage.clear()
     } catch (error) {
-      console.warn('Failed to clear localStorage:', error)
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.warn('Failed to clear localStorage:', error)
+      }
     }
   }
 }

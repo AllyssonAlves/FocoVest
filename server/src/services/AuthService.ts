@@ -1,8 +1,13 @@
 import User, { IUser } from '../models/User'
 import { MockUser, mockUserDB } from './MockUserService'
-import { generateToken } from '../middleware/auth'
+import { generateToken, verifyToken } from '../middleware/auth'
 import { createError } from '../middleware/errorHandler'
 import { University, UserRole } from '../../../shared/dist/types'
+import { tokenBlacklistService } from './TokenBlacklistService'
+import { SessionService, DeviceInfo } from './SessionService'
+import { SecurityNotificationService } from './SecurityNotificationService'
+import jwt from 'jsonwebtoken'
+import { Request } from 'express'
 
 // Verificar se MongoDB está disponível
 const isMongoAvailable = () => {
@@ -27,6 +32,8 @@ export interface RegisterData {
 export interface LoginData {
   email: string
   password: string
+  rememberMe?: boolean
+  deviceInfo?: Partial<DeviceInfo>
 }
 
 export interface AuthResponse {
@@ -35,6 +42,8 @@ export interface AuthResponse {
   data?: {
     user: Partial<IUser>
     token: string
+    refreshToken?: string
+    expiresIn?: number
   }
 }
 
@@ -101,9 +110,10 @@ export class AuthService {
         console.log('✅ AuthService: Usuário criado no MockDB')
       }
 
-      // Gerar JWT token
+      // Gerar JWT token e refresh token
       const token = generateToken(user)
-      console.log('🔑 AuthService: Token JWT gerado')
+      const refreshToken = this.generateRefreshToken(user)
+      console.log('🔑 AuthService: Tokens JWT e refresh gerados')
 
       // Remover senha da resposta
       const userResponse = {
@@ -130,7 +140,9 @@ export class AuthService {
         message: 'Usuário registrado com sucesso.',
         data: {
           user: userResponse,
-          token
+          token,
+          refreshToken,
+          expiresIn: 24 * 60 * 60 // 24 horas em segundos
         }
       }
 
@@ -143,7 +155,7 @@ export class AuthService {
     }
   }
 
-  static async login(data: LoginData): Promise<AuthResponse> {
+  static async login(data: LoginData, req?: Request): Promise<AuthResponse> {
     try {
       const UserModel = isMongoAvailable() ? User : MockUser
       
@@ -190,16 +202,45 @@ export class AuthService {
         throw createError('Email ou senha incorretos', 401)
       }
 
-      console.log('✅ AuthService: Senha correta, gerando token...')
+      console.log('✅ AuthService: Senha correta, gerando tokens...')
       console.log('🔑 AuthService: Dados do usuário para token:', { 
         id: user._id, 
         email: user.email, 
         tipo_id: typeof user._id 
       })
 
-      // Gerar JWT token
+      // Gerar JWT token e refresh token
       const token = generateToken(user)
-      console.log('🎟️  AuthService: Token gerado com payload para userId:', user._id)
+      const refreshToken = this.generateRefreshToken(user)
+      console.log('🎟️  AuthService: Tokens gerados para userId:', user._id)
+
+      // Criar sessão se informações do dispositivo estiverem disponíveis
+      if (req) {
+        const deviceInfo = data.deviceInfo || SessionService.extractDeviceInfo(req)
+        const userId = (user._id as any).toString()
+        await SessionService.createSession(userId, deviceInfo, refreshToken)
+        console.log('📱 AuthService: Sessão criada para dispositivo')
+
+        // Verificar se é um novo dispositivo e criar alerta de segurança
+        const { isNewDevice, alert } = await SecurityNotificationService.checkNewDeviceLogin(
+          userId, 
+          req
+        )
+        
+        if (isNewDevice && alert) {
+          console.log('🔔 Novo dispositivo detectado, alerta de segurança criado')
+        }
+      }
+      
+      // Atualizar último login
+      if (isMongoAvailable()) {
+        (user as any).lastLoginAt = new Date()
+        await (user as any).save()
+      } else {
+        // Para MockUser, atualizar via findByIdAndUpdate
+        const userId = (user._id as any).toString()
+        await mockUserDB.findByIdAndUpdate(userId, { lastLoginAt: new Date() })
+      }
 
       // Remover senha da resposta
       const userResponse = {
@@ -226,12 +267,98 @@ export class AuthService {
         message: 'Login realizado com sucesso',
         data: {
           user: userResponse,
-          token
+          token,
+          refreshToken,
+          expiresIn: data.rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60 // 30 dias se "lembrar" ou 24 horas
         }
       }
 
     } catch (error: any) {
       console.log('❌ AuthService: Erro no login:', error.message)
+      
+      // Registrar tentativa de login falhada se for erro de autenticação
+      if (req && (error.message?.includes('incorretos') || error.message?.includes('não encontrado'))) {
+        await SecurityNotificationService.recordFailedLogin(data.email, req)
+      }
+      
+      throw error
+    }
+  }
+
+  // Versão otimizada do login sem complexidades extras
+  static async loginBasic(data: { email: string; password: string; rememberMe?: boolean }): Promise<AuthResponse> {
+    try {
+      console.log('⚡ AuthService.loginBasic: Início para:', data.email)
+      
+      if (!data.email || !data.password) {
+        throw createError('Email e senha são obrigatórios', 400)
+      }
+
+      // Buscar usuário (sempre usar MockDB para desenvolvimento otimizado)
+      const user = await MockUser.findOne({ 
+        email: data.email.toLowerCase() 
+      })
+
+      if (!user) {
+        console.log('❌ AuthService.loginBasic: Usuário não encontrado:', data.email)
+        throw createError('Email ou senha incorretos', 401)
+      }
+
+      // Verificar senha
+      const bcrypt = require('bcryptjs')
+      const isPasswordValid = await bcrypt.compare(data.password, user.password)
+      
+      if (!isPasswordValid) {
+        console.log('❌ AuthService.loginBasic: Senha incorreta para:', data.email)
+        throw createError('Email ou senha incorretos', 401)
+      }
+
+      console.log('✅ AuthService.loginBasic: Autenticação bem-sucedida')
+
+      // Gerar token
+      const token = generateToken(user)
+      
+      // Atualizar último login de forma assíncrona (não bloquear resposta)
+      setImmediate(async () => {
+        try {
+          const userId = (user._id as any).toString()
+          await mockUserDB.findByIdAndUpdate(userId, { lastLoginAt: new Date() })
+        } catch (error) {
+          console.log('⚠️ Erro ao atualizar último login:', error)
+        }
+      })
+
+      // Resposta otimizada
+      const userResponse = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        university: user.university,
+        course: user.course,
+        role: user.role,
+        level: user.level,
+        experience: user.experience,
+        statistics: user.statistics,
+        isEmailVerified: user.isEmailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+
+      console.log('🎉 AuthService.loginBasic: Login concluído com sucesso!')
+
+      return {
+        success: true,
+        message: 'Login realizado com sucesso',
+        data: {
+          user: userResponse,
+          token,
+          expiresIn: data.rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60
+        }
+      }
+
+    } catch (error: any) {
+      console.log('❌ AuthService.loginBasic: Erro:', error.message)
       throw error
     }
   }
@@ -365,9 +492,29 @@ export class AuthService {
     }
   }
 
-  static async refreshToken(user: IUser): Promise<AuthResponse> {
+  static async refreshToken(user: IUser, oldToken?: string): Promise<AuthResponse> {
     try {
+      // Se há token antigo, adiciona à blacklist
+      if (oldToken) {
+        try {
+          const decoded = jwt.decode(oldToken) as any
+          if (decoded && decoded.exp) {
+            const expiresAt = new Date(decoded.exp * 1000)
+            tokenBlacklistService.blacklistToken(
+              oldToken, 
+              (user._id as any).toString(), 
+              expiresAt, 
+              'logout'
+            )
+          }
+        } catch (error) {
+          console.log('⚠️ Erro ao decodificar token antigo:', error)
+        }
+      }
+
+      // Gera novo token
       const token = generateToken(user)
+      const refreshToken = this.generateRefreshToken(user)
 
       const userResponse = {
         _id: user._id,
@@ -391,12 +538,159 @@ export class AuthService {
         message: 'Token renovado com sucesso',
         data: {
           user: userResponse,
-          token
+          token,
+          refreshToken,
+          expiresIn: 24 * 60 * 60 // 24 horas em segundos
         }
       }
 
     } catch (error: any) {
       throw error
+    }
+  }
+
+  static async logout(
+    token: string, 
+    refreshToken?: string, 
+    userId?: string
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      // Decodifica o token para obter informações
+      const decoded = jwt.decode(token) as any
+      
+      if (decoded && decoded.exp) {
+        const expiresAt = new Date(decoded.exp * 1000)
+        const userIdFromToken = decoded.userId || userId
+        
+        // Adiciona o access token à blacklist
+        tokenBlacklistService.blacklistToken(
+          token, 
+          userIdFromToken, 
+          expiresAt, 
+          'logout'
+        )
+
+        // Invalida a sessão específica se refresh token for fornecido
+        if (refreshToken) {
+          await SessionService.invalidateSessionByRefreshToken(refreshToken)
+          console.log('🔄 Sessão invalidada via refresh token')
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Logout realizado com sucesso'
+      }
+
+    } catch (error: any) {
+      console.log('⚠️ Erro no logout:', error)
+      return {
+        success: true,
+        message: 'Logout realizado com sucesso'
+      }
+    }
+  }
+
+  static async logoutAllDevices(userId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // Invalidar todas as sessões do usuário
+      await SessionService.invalidateAllUserSessions(userId)
+      
+      // Adicionar todos os tokens à blacklist
+      tokenBlacklistService.blacklistAllUserTokens(userId, 'security')
+      
+      console.log('🚪 Logout de todos os dispositivos para usuário:', userId)
+
+      return {
+        success: true,
+        message: 'Logout realizado em todos os dispositivos'
+      }
+
+    } catch (error: any) {
+      console.log('⚠️ Erro no logout de todos os dispositivos:', error)
+      return {
+        success: false,
+        message: 'Erro ao fazer logout de todos os dispositivos'
+      }
+    }
+  }
+
+  static async getUserSessions(userId: string): Promise<{
+    success: boolean;
+    data?: {
+      activeSessions: any[];
+      stats: {
+        activeSessions: number;
+        totalDevices: number;
+        lastActivity: Date | null;
+      };
+    };
+  }> {
+    try {
+      const sessions = await SessionService.findUserActiveSessions(userId)
+      const stats = await SessionService.getSessionStats(userId)
+
+      return {
+        success: true,
+        data: {
+          activeSessions: sessions.map(session => ({
+            deviceId: session.deviceInfo.id,
+            browser: session.deviceInfo.browser,
+            os: session.deviceInfo.os,
+            ip: session.deviceInfo.ip,
+            lastActivity: session.deviceInfo.lastActivity,
+            createdAt: session.deviceInfo.createdAt
+          })),
+          stats
+        }
+      }
+
+    } catch (error: any) {
+      console.log('⚠️ Erro ao obter sessões do usuário:', error)
+      return {
+        success: false
+      }
+    }
+  }
+
+  static async validateRefreshToken(refreshToken: string): Promise<IUser | null> {
+    try {
+      const decoded = verifyToken(refreshToken) as any
+      
+      if (!decoded || !decoded.userId) {
+        return null
+      }
+
+      const UserModel = isMongoAvailable() ? User : MockUser
+      const user = await UserModel.findById(decoded.userId)
+
+      return user
+    } catch (error) {
+      return null
+    }
+  }
+
+  private static generateRefreshToken(user: IUser): string {
+    const JWT_SECRET = process.env.JWT_SECRET || 'focovest-secret-key-2024'
+    
+    return jwt.sign(
+      { 
+        userId: user._id,
+        type: 'refresh'
+      },
+      JWT_SECRET,
+      { expiresIn: '30d' } // Refresh token válido por 30 dias
+    )
+  }
+
+  static async securityLogout(userId: string, reason: string = 'Atividade suspeita'): Promise<void> {
+    try {
+      // Invalida todos os tokens do usuário
+      tokenBlacklistService.blacklistAllUserTokens(userId, 'security')
+      
+      console.log(`🚨 Logout de segurança executado para usuário ${userId}: ${reason}`)
+    } catch (error: any) {
+      console.error('❌ Erro no logout de segurança:', error)
     }
   }
 }

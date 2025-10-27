@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.metricsEndpoint = exports.errorLogger = exports.userActionLogger = exports.morganLogger = exports.requestLogger = exports.metricsSystem = void 0;
 const morgan_1 = __importDefault(require("morgan"));
+const logger_1 = require("../utils/logger");
 class MetricsSystem {
     constructor() {
         this.metrics = {
@@ -160,9 +161,8 @@ const requestLogger = (req, res, next) => {
     res.json = function (body) {
         const responseTime = Date.now() - startTime;
         exports.metricsSystem.recordRequest(req, res.statusCode, responseTime);
-        if (process.env.NODE_ENV !== 'production') {
-            console.log(`${req.method} ${req.path} - ${res.statusCode} - ${responseTime}ms`);
-        }
+        const requestLogger = (0, logger_1.createRequestLogger)(req);
+        requestLogger.apiRequest(req.method, req.path, res.statusCode, responseTime);
         return originalJson.call(this, body);
     };
     next();
@@ -195,9 +195,8 @@ exports.userActionLogger = userActionLogger;
 const errorLogger = (error, req, res, next) => {
     const userId = req.user?.id;
     exports.metricsSystem.recordError(error.message, req.path, userId);
-    console.error(`❌ Error in ${req.method} ${req.path}:`, {
-        error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    const requestLogger = (0, logger_1.createRequestLogger)(req);
+    requestLogger.error(`Error in ${req.method} ${req.path}`, error, {
         userId,
         ip: req.ip,
         userAgent: req.get('User-Agent')
@@ -218,13 +217,12 @@ const metricsEndpoint = (req, res) => {
 exports.metricsEndpoint = metricsEndpoint;
 setInterval(() => {
     const metrics = exports.metricsSystem.getMetrics();
-    if (process.env.NODE_ENV === 'production') {
-        console.log('📊 Hourly metrics:', {
-            requests: metrics.requests.total,
-            users: metrics.users.activeNow,
-            errors: metrics.errors.total,
-            memory: metrics.performance.memoryUsage.heapUsed
-        });
-    }
+    logger_1.globalLogger.info('Hourly System Metrics', {
+        requests: metrics.requests.total,
+        activeUsers: metrics.users.activeNow,
+        errors: metrics.errors.total,
+        memoryUsage: metrics.performance.memoryUsage.heapUsed,
+        type: 'system-metrics'
+    });
 }, 60 * 60 * 1000);
 //# sourceMappingURL=monitoring.js.map

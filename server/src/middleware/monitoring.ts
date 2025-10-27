@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import morgan from 'morgan'
+import { globalLogger, createRequestLogger } from '../utils/logger'
 
 // Interface para métricas do sistema
 interface SystemMetrics {
@@ -230,10 +231,9 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     // Registrar métricas
     metricsSystem.recordRequest(req, res.statusCode, responseTime)
     
-    // Log detalhado em desenvolvimento
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`${req.method} ${req.path} - ${res.statusCode} - ${responseTime}ms`)
-    }
+    // Log estruturado da requisição
+    const requestLogger = createRequestLogger(req)
+    requestLogger.apiRequest(req.method, req.path, res.statusCode, responseTime)
 
     return originalJson.call(this, body)
   }
@@ -281,10 +281,9 @@ export const errorLogger = (error: Error, req: Request, res: Response, next: Nex
   const userId = (req as any).user?.id
   metricsSystem.recordError(error.message, req.path, userId)
   
-  // Log do erro
-  console.error(`❌ Error in ${req.method} ${req.path}:`, {
-    error: error.message,
-    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+  // Log estruturado do erro
+  const requestLogger = createRequestLogger(req)
+  requestLogger.error(`Error in ${req.method} ${req.path}`, error, {
     userId,
     ip: req.ip,
     userAgent: req.get('User-Agent')
@@ -312,13 +311,12 @@ setInterval(() => {
   // Limpar métricas antigas se necessário
   const metrics = metricsSystem.getMetrics()
   
-  // Log básico de status a cada hora em produção
-  if (process.env.NODE_ENV === 'production') {
-    console.log('📊 Hourly metrics:', {
-      requests: metrics.requests.total,
-      users: metrics.users.activeNow,
-      errors: metrics.errors.total,
-      memory: metrics.performance.memoryUsage.heapUsed
-    })
-  }
+  // Log de métricas horárias
+  globalLogger.info('Hourly System Metrics', {
+    requests: metrics.requests.total,
+    activeUsers: metrics.users.activeNow,
+    errors: metrics.errors.total,
+    memoryUsage: metrics.performance.memoryUsage.heapUsed,
+    type: 'system-metrics'
+  })
 }, 60 * 60 * 1000) // 1 hora

@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express'
 import Question, { IQuestion } from '../models/Question'
 import { requireAuth, AuthRequest } from '../middleware/auth'
-import { mockQuestionService } from '../services/MockQuestionService'
+import HybridQuestionService from '../services/HybridQuestionService'
 
 const router = Router()
+const questionService = new HybridQuestionService()
 
 interface QuestionQuery {
   subject?: string
@@ -18,395 +19,225 @@ interface QuestionQuery {
 // GET /api/questions - Listar questões com filtros
 router.get('/', async (req: Request<{}, {}, {}, QuestionQuery>, res: Response) => {
   try {
-    const { 
-      subject, 
-      university, 
-      difficulty, 
-      topics, 
-      search, 
-      page = '1', 
-      limit = '10' 
-    } = req.query
-
-    // Usar MockDB se MongoDB não estiver disponível
-    if (process.env.NODE_ENV === 'development') {
-      const result = await mockQuestionService.getQuestions({
-        subject,
-        university,
-        difficulty: difficulty as 'easy' | 'medium' | 'hard',
-        topics: topics ? topics.split(',') : undefined,
-        search,
-        page: parseInt(page),
-        limit: parseInt(limit)
-      })
-
-      return res.json({
-        success: true,
-        data: result.questions,
-        pagination: {
-          currentPage: result.currentPage,
-          totalPages: result.totalPages,
-          totalQuestions: result.totalQuestions,
-          hasNext: result.hasNext,
-          hasPrev: result.hasPrev
-        }
-      })
+    const page = parseInt(req.query.page || '1')
+    const limit = parseInt(req.query.limit || '20')
+    
+    const filters: any = {}
+    
+    if (req.query.subject) {
+      filters.subject = req.query.subject
+    }
+    
+    if (req.query.university) {
+      filters.university = req.query.university
+    }
+    
+    if (req.query.difficulty) {
+      filters.difficulty = req.query.difficulty
+    }
+    
+    if (req.query.topics) {
+      filters.topics = req.query.topics.split(',')
     }
 
-    // Construir filtros para MongoDB
-    const filters: any = { isActive: true }
+    console.log('🔍 Filtros aplicados:', filters)
     
-    if (subject) filters.subject = subject
-    if (university) filters.university = university
-    if (difficulty) filters.difficulty = difficulty
-    if (topics) filters.topics = { $in: topics.split(',') }
+    const result = await questionService.getQuestions(filters, page, limit)
     
-    if (search) {
-      filters.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { statement: { $regex: search, $options: 'i' } },
-        { explanation: { $regex: search, $options: 'i' } }
-      ]
-    }
-
-    const pageNum = parseInt(page)
-    const limitNum = parseInt(limit)
-    const skip = (pageNum - 1) * limitNum
-
-    const [questions, totalQuestions] = await Promise.all([
-      Question.find(filters)
-        .select('-__v')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .populate('createdBy', 'name email'),
-      Question.countDocuments(filters)
-    ])
-
-    const totalPages = Math.ceil(totalQuestions / limitNum)
-
+    console.log('📊 Resultado da busca:', {
+      total: result.totalQuestions,
+      page: result.currentPage,
+      totalPages: result.totalPages
+    })
+    
     return res.json({
       success: true,
-      data: questions,
-      pagination: {
-        currentPage: pageNum,
-        totalPages,
-        totalQuestions,
-        hasNext: pageNum < totalPages,
-        hasPrev: pageNum > 1
-      }
+      data: result
     })
-  } catch (error) {
-    console.error('Error fetching questions:', error)
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor'
+  } catch (error: any) {
+    console.error('❌ Erro ao buscar questões:', error)
+    return res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
     })
   }
 })
 
-// GET /api/questions/:id - Buscar questão por ID
+// GET /api/questions/:id - Buscar questão específica
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    console.log('🔍 Buscando questão com ID:', id)
-
-    // Usar MockDB se MongoDB não estiver disponível
-    if (process.env.NODE_ENV === 'development') {
-      const question = await mockQuestionService.getQuestionById(id)
-      
-      if (!question) {
-        console.log('❌ Questão não encontrada:', id)
-        return res.status(404).json({
-          success: false,
-          message: 'Questão não encontrada'
-        })
-      }
-
-      // Adicionar o campo correctAnswer baseado na alternativa correta
-      const correctAlternative = question.alternatives.find(alt => alt.isCorrect)
-      const questionWithCorrectAnswer = {
-        ...question.toObject ? question.toObject() : question,
-        correctAnswer: correctAlternative?.letter || null
-      }
-
-      console.log('✅ Questão encontrada:', question.title || question._id)
-      console.log('🎯 Resposta correta:', correctAlternative?.letter)
-      
-      return res.json({
-        success: true,
-        data: questionWithCorrectAnswer
-      })
-    }
-
-    const question = await Question.findById(id)
-      .select('-__v')
-      .populate('createdBy', 'name email')
-
-    if (!question || !question.isActive) {
+    
+    console.log('🔍 Buscando questão ID:', id)
+    
+    const question = await questionService.getQuestionById(id)
+    
+    if (!question) {
       return res.status(404).json({
         success: false,
         message: 'Questão não encontrada'
       })
     }
 
-    // Adicionar campo correctAnswer baseado na alternativa correta
-    const correctAlternative = question.alternatives.find(alt => alt.isCorrect)
-    const correctAnswer = correctAlternative?.letter || null
+    // Verificar se há propriedades diferentes entre IQuestion e IQuestao
+    const questionData = question as any
     
-    console.log(`[Question ${question._id}] Correct answer detected:`, correctAnswer)
-
-    const questionWithCorrectAnswer = {
-      ...question.toObject(),
-      correctAnswer
+    // Tentar acessar propriedades de ambos os tipos
+    const alternatives = questionData.alternatives || questionData.alternativas || []
+    const correctAnswer = alternatives.find((alt: any) => alt.isCorrect || alt.correta)
+    
+    const responseData = {
+      ...questionData,
+      correctAnswer: correctAnswer?.letter || correctAnswer?.id || null
     }
 
+    console.log('✅ Questão encontrada:', questionData.title || questionData._id)
+    console.log('🎯 Resposta correta:', correctAnswer?.letter || correctAnswer?.id)
+    
     return res.json({
       success: true,
-      data: questionWithCorrectAnswer
+      data: responseData
     })
-  } catch (error) {
-    console.error('Error fetching question:', error)
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor'
+  } catch (error: any) {
+    console.error('❌ Erro ao buscar questão:', error)
+    return res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
     })
   }
 })
 
-// POST /api/questions - Criar nova questão
+// POST /api/questions - Criar nova questão (requer autenticação)
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id
+
     const questionData = {
-      ...req.body,
-      createdBy: req.user?._id
+      title: req.body.title,
+      enunciado: req.body.enunciado,
+      alternativas: req.body.alternativas,
+      gabarito: req.body.gabarito,
+      explanation: req.body.explanation,
+      subject: req.body.subject,
+      difficulty: req.body.difficulty,
+      university: req.body.university,
+      topics: req.body.topics || [],
+      year: req.body.year,
+      createdBy: userId
     }
 
-    // Usar MockDB se MongoDB não estiver disponível
-    if (process.env.NODE_ENV === 'development') {
-      const question = await mockQuestionService.createQuestion(questionData)
-      
-      return res.status(201).json({
-        success: true,
-        data: question,
-        message: 'Questão criada com sucesso'
+    // Validação básica
+    if (!questionData.title || !questionData.enunciado || !questionData.alternativas || 
+        !questionData.gabarito || !questionData.subject) {
+      return res.status(400).json({
+        success: false,
+        message: 'Campos obrigatórios: title, enunciado, alternativas, gabarito, subject'
       })
     }
 
-    const question = new Question(questionData)
-    await question.save()
-
+    console.log('📝 Criando nova questão:', questionData.title)
+    
+    const question = await questionService.createQuestion(questionData)
+    
+    console.log('✅ Questão criada com sucesso:', question)
+    
     return res.status(201).json({
       success: true,
       data: question,
       message: 'Questão criada com sucesso'
     })
   } catch (error: any) {
-    console.error('Error creating question:', error)
-    
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Dados inválidos',
-        errors: Object.values(error.errors).map((err: any) => err.message)
-      })
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor'
+    console.error('❌ Erro ao criar questão:', error)
+    return res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
     })
   }
 })
 
-// PUT /api/questions/:id - Atualizar questão
+// PUT /api/questions/:id - Atualizar questão (requer autenticação)
 router.put('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
-    const userId = req.user?._id?.toString()
+    const userId = req.user!.id
 
-    // Usar MockDB se MongoDB não estiver disponível
-    if (process.env.NODE_ENV === 'development') {
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuário não autenticado'
-        })
-      }
-      
-      const question = await mockQuestionService.updateQuestion(id, req.body, userId)
-      
-      if (!question) {
-        return res.status(404).json({
-          success: false,
-          message: 'Questão não encontrada'
-        })
-      }
-
-      return res.json({
-        success: true,
-        data: question,
-        message: 'Questão atualizada com sucesso'
-      })
-    }
-
-    const question = await Question.findById(id)
-
-    if (!question || !question.isActive) {
+    console.log('📝 Atualizando questão ID:', id)
+    
+    const question = await questionService.updateQuestion(id, req.body, userId)
+    
+    if (!question) {
       return res.status(404).json({
         success: false,
         message: 'Questão não encontrada'
       })
     }
-
-    // Verificar se o usuário é o criador da questão
-    if (question.createdBy.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Não autorizado para editar esta questão'
-      })
-    }
-
-    Object.assign(question, req.body)
-    await question.save()
-
+    
+    console.log('✅ Questão atualizada com sucesso')
+    
     return res.json({
       success: true,
       data: question,
       message: 'Questão atualizada com sucesso'
     })
   } catch (error: any) {
-    console.error('Error updating question:', error)
-    
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Dados inválidos',
-        errors: Object.values(error.errors).map((err: any) => err.message)
-      })
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor'
+    console.error('❌ Erro ao atualizar questão:', error)
+    return res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
     })
   }
 })
 
-// DELETE /api/questions/:id - Deletar questão (soft delete)
+// DELETE /api/questions/:id - Remover questão (requer autenticação)
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
-    const userId = req.user?._id?.toString()
+    const userId = req.user!.id
 
-    // Usar MockDB se MongoDB não estiver disponível
-    if (process.env.NODE_ENV === 'development') {
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuário não autenticado'
-        })
-      }
-      
-      const success = await mockQuestionService.deleteQuestion(id, userId)
-      
-      if (!success) {
-        return res.status(404).json({
-          success: false,
-          message: 'Questão não encontrada'
-        })
-      }
-
-      return res.json({
-        success: true,
-        message: 'Questão removida com sucesso'
-      })
-    }
-
-    const question = await Question.findById(id)
-
-    if (!question || !question.isActive) {
+    console.log('🗑️  Removendo questão ID:', id)
+    
+    const success = await questionService.deleteQuestion(id, userId)
+    
+    if (!success) {
       return res.status(404).json({
         success: false,
         message: 'Questão não encontrada'
       })
     }
-
-    // Verificar se o usuário é o criador da questão
-    if (question.createdBy.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Não autorizado para remover esta questão'
-      })
-    }
-
-    question.isActive = false
-    await question.save()
-
+    
+    console.log('✅ Questão removida com sucesso')
+    
     return res.json({
       success: true,
       message: 'Questão removida com sucesso'
     })
-  } catch (error) {
-    console.error('Error deleting question:', error)
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor'
+  } catch (error: any) {
+    console.error('❌ Erro ao remover questão:', error)
+    return res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
     })
   }
 })
 
-// GET /api/questions/stats/summary - Estatísticas das questões
-router.get('/stats/summary', async (req: Request, res: Response) => {
+// GET /api/questions/stats/overview - Estatísticas das questões
+router.get('/stats/overview', async (req: Request, res: Response) => {
   try {
-    // Usar MockDB se MongoDB não estiver disponível
-    if (process.env.NODE_ENV === 'development') {
-      const stats = await mockQuestionService.getQuestionStats()
-      
-      return res.json({
-        success: true,
-        data: stats
-      })
-    }
-
-    const [
-      totalQuestions,
-      questionsBySubject,
-      questionsByUniversity,
-      questionsByDifficulty
-    ] = await Promise.all([
-      Question.countDocuments({ isActive: true }),
-      Question.aggregate([
-        { $match: { isActive: true } },
-        { $group: { _id: '$subject', count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]),
-      Question.aggregate([
-        { $match: { isActive: true } },
-        { $group: { _id: '$university', count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]),
-      Question.aggregate([
-        { $match: { isActive: true } },
-        { $group: { _id: '$difficulty', count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ])
-    ])
-
+    console.log('📊 Buscando estatísticas das questões...')
+    
+    const stats = await questionService.getQuestionStats()
+    
+    console.log('✅ Estatísticas calculadas:', stats)
+    
     return res.json({
       success: true,
-      data: {
-        totalQuestions,
-        bySubject: questionsBySubject,
-        byUniversity: questionsByUniversity,
-        byDifficulty: questionsByDifficulty
-      }
+      data: stats
     })
-  } catch (error) {
-    console.error('Error fetching question stats:', error)
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor'
+  } catch (error: any) {
+    console.error('❌ Erro ao calcular estatísticas:', error)
+    return res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
     })
   }
 })

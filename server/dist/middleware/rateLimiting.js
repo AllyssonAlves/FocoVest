@@ -33,7 +33,7 @@ exports.generalRateLimit = (0, express_rate_limit_1.default)({
 });
 exports.authRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: process.env.NODE_ENV === 'development' ? 100 : 5,
     message: {
         success: false,
         message: 'Muitas tentativas de login, tente novamente em 15 minutos.',
@@ -42,6 +42,13 @@ exports.authRateLimit = (0, express_rate_limit_1.default)({
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true,
+    skip: (req) => {
+        if (process.env.NODE_ENV === 'development' &&
+            (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip?.includes('localhost'))) {
+            return true;
+        }
+        return false;
+    },
     handler: (req, res) => {
         console.log(`🚨 Rate limit de auth atingido para IP: ${req.ip}`);
         res.status(429).json({

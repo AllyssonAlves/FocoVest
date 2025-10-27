@@ -5,7 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.securityLogger = exports.sanitizeInput = exports.validateQuery = exports.validateId = exports.validateSimulationCreation = exports.validateLogin = exports.validateRegister = exports.handleValidationErrors = exports.securityMiddleware = void 0;
 const helmet_1 = __importDefault(require("helmet"));
-const express_validator_1 = require("express-validator");
+const secureValidation_1 = require("./secureValidation");
+const logger_1 = require("../utils/logger");
 exports.securityMiddleware = (0, helmet_1.default)({
     contentSecurityPolicy: {
         directives: {
@@ -38,113 +39,104 @@ exports.securityMiddleware = (0, helmet_1.default)({
     referrerPolicy: { policy: "no-referrer" },
     xssFilter: true
 });
-const handleValidationErrors = (req, res, next) => {
-    const errors = (0, express_validator_1.validationResult)(req);
-    if (!errors.isEmpty()) {
-        res.status(400).json({
-            success: false,
-            message: 'Dados inválidos fornecidos',
-            errors: errors.array().map(error => ({
-                field: error.type === 'field' ? error.path : 'unknown',
-                message: error.msg,
-                value: error.type === 'field' ? error.value : undefined
-            }))
-        });
-        return;
-    }
-    next();
+const handleValidationErrors = (errors) => {
+    return (req, res, next) => {
+        if (errors.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Dados inválidos fornecidos',
+                errors: errors.map(error => ({
+                    field: error.field,
+                    message: error.message,
+                    value: error.value
+                }))
+            });
+            return;
+        }
+        next();
+    };
 };
 exports.handleValidationErrors = handleValidationErrors;
-exports.validateRegister = [
-    (0, express_validator_1.body)('name')
-        .trim()
-        .isLength({ min: 2, max: 100 })
-        .withMessage('Nome deve ter entre 2 e 100 caracteres')
-        .matches(/^[a-zA-ZÀ-ÿ\s]+$/)
-        .withMessage('Nome deve conter apenas letras e espaços'),
-    (0, express_validator_1.body)('email')
-        .isEmail()
-        .normalizeEmail()
-        .withMessage('Email deve ter um formato válido')
-        .isLength({ max: 255 })
-        .withMessage('Email muito longo'),
-    (0, express_validator_1.body)('password')
-        .isLength({ min: 8, max: 128 })
-        .withMessage('Senha deve ter entre 8 e 128 caracteres')
-        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-        .withMessage('Senha deve conter pelo menos: 1 letra minúscula, 1 maiúscula e 1 número'),
-    (0, express_validator_1.body)('university')
-        .optional()
-        .isIn(['UVA', 'UECE', 'UFC', 'URCA', 'IFCE', 'ENEM'])
-        .withMessage('Universidade deve ser uma das opções válidas'),
-    (0, express_validator_1.body)('course')
-        .optional()
-        .trim()
-        .isLength({ max: 100 })
-        .withMessage('Curso deve ter no máximo 100 caracteres'),
-    (0, express_validator_1.body)('graduationYear')
-        .optional()
-        .isInt({ min: new Date().getFullYear(), max: new Date().getFullYear() + 10 })
-        .withMessage('Ano de graduação deve estar entre o ano atual e 10 anos no futuro'),
-    exports.handleValidationErrors
-];
-exports.validateLogin = [
-    (0, express_validator_1.body)('email')
-        .isEmail()
-        .normalizeEmail()
-        .withMessage('Email deve ter um formato válido'),
-    (0, express_validator_1.body)('password')
-        .notEmpty()
-        .withMessage('Senha é obrigatória')
-        .isLength({ max: 128 })
-        .withMessage('Senha muito longa'),
-    exports.handleValidationErrors
-];
-exports.validateSimulationCreation = [
-    (0, express_validator_1.body)('title')
-        .trim()
-        .isLength({ min: 3, max: 200 })
-        .withMessage('Título deve ter entre 3 e 200 caracteres'),
-    (0, express_validator_1.body)('description')
-        .trim()
-        .isLength({ min: 10, max: 1000 })
-        .withMessage('Descrição deve ter entre 10 e 1000 caracteres'),
-    (0, express_validator_1.body)('settings.timeLimit')
-        .isInt({ min: 1, max: 600 })
-        .withMessage('Tempo limite deve estar entre 1 e 600 minutos'),
-    (0, express_validator_1.body)('settings.questionsCount')
-        .isInt({ min: 1, max: 200 })
-        .withMessage('Número de questões deve estar entre 1 e 200'),
-    (0, express_validator_1.body)('settings.subjects')
-        .isArray({ min: 1 })
-        .withMessage('Pelo menos uma matéria deve ser selecionada'),
-    (0, express_validator_1.body)('settings.universities')
-        .isArray({ min: 1 })
-        .withMessage('Pelo menos uma universidade deve ser selecionada'),
-    exports.handleValidationErrors
-];
-exports.validateId = [
-    (0, express_validator_1.param)('id')
-        .matches(/^[0-9a-fA-F]{24}$|^mock_\d+$|^\d+$/)
-        .withMessage('ID inválido'),
-    exports.handleValidationErrors
-];
-exports.validateQuery = [
-    (0, express_validator_1.query)('page')
-        .optional()
-        .isInt({ min: 1 })
-        .withMessage('Página deve ser um número positivo'),
-    (0, express_validator_1.query)('limit')
-        .optional()
-        .isInt({ min: 1, max: 100 })
-        .withMessage('Limite deve estar entre 1 e 100'),
-    (0, express_validator_1.query)('search')
-        .optional()
-        .trim()
-        .isLength({ max: 100 })
-        .withMessage('Busca deve ter no máximo 100 caracteres'),
-    exports.handleValidationErrors
-];
+exports.validateRegister = (0, secureValidation_1.validate)(new secureValidation_1.SecureValidator()
+    .field('name').required().isString().minLength(2).maxLength(100).matches(/^[a-zA-ZÀ-ÿ\s]+$/).build()
+    .field('email').required().isEmail().maxLength(255).build()
+    .field('password').required().isPassword().minLength(8).maxLength(128).build()
+    .field('university').optional().isString().custom((value) => {
+    const valid = ['UVA', 'UECE', 'UFC', 'URCA', 'IFCE', 'ENEM'];
+    return !value || valid.includes(value) || 'Universidade deve ser uma das opções válidas';
+}).build()
+    .field('course').optional().isString().maxLength(100).build()
+    .field('graduationYear').optional().isNumber().custom((value) => {
+    const currentYear = new Date().getFullYear();
+    const num = Number(value);
+    return !value || (num >= currentYear && num <= currentYear + 10) ||
+        'Ano de graduação deve estar entre o ano atual e 10 anos no futuro';
+}).build());
+exports.validateLogin = (0, secureValidation_1.validate)(new secureValidation_1.SecureValidator()
+    .field('email').required().isEmail().build()
+    .field('password').required().isString().minLength(6).maxLength(128).build()
+    .field('rememberMe').optional().isBoolean().build()
+    .field('deviceInfo').optional().custom((value) => {
+    if (value && typeof value === 'object') {
+        const { userAgent, platform, language, browser, os, ip } = value;
+        if (userAgent && (typeof userAgent !== 'string' || userAgent.length > 500)) {
+            return 'UserAgent deve ser uma string válida (máximo 500 caracteres)';
+        }
+        if (platform && (typeof platform !== 'string' || platform.length > 100)) {
+            return 'Platform deve ser uma string válida (máximo 100 caracteres)';
+        }
+        if (language && (typeof language !== 'string' || language.length > 20)) {
+            return 'Language deve ser uma string válida (máximo 20 caracteres)';
+        }
+        if (browser && (typeof browser !== 'string' || browser.length > 100)) {
+            return 'Browser deve ser uma string válida (máximo 100 caracteres)';
+        }
+        if (os && (typeof os !== 'string' || os.length > 100)) {
+            return 'OS deve ser uma string válida (máximo 100 caracteres)';
+        }
+        if (ip && (typeof ip !== 'string' || ip.length > 45)) {
+            return 'IP deve ser uma string válida (máximo 45 caracteres)';
+        }
+        return true;
+    }
+    return true;
+}).build());
+exports.validateSimulationCreation = (0, secureValidation_1.validate)(new secureValidation_1.SecureValidator()
+    .field('title').required().isString().minLength(3).maxLength(200).build()
+    .field('description').required().isString().minLength(10).maxLength(1000).build()
+    .field('settings').required().custom((settings) => {
+    if (!settings || typeof settings !== 'object')
+        return 'Settings é obrigatório';
+    const timeLimit = Number(settings.timeLimit);
+    if (!timeLimit || timeLimit < 1 || timeLimit > 600) {
+        return 'Tempo limite deve estar entre 1 e 600 minutos';
+    }
+    const questionsCount = Number(settings.questionsCount);
+    if (!questionsCount || questionsCount < 1 || questionsCount > 200) {
+        return 'Número de questões deve estar entre 1 e 200';
+    }
+    if (!Array.isArray(settings.subjects) || settings.subjects.length === 0) {
+        return 'Pelo menos uma matéria deve ser selecionada';
+    }
+    if (!Array.isArray(settings.universities) || settings.universities.length === 0) {
+        return 'Pelo menos uma universidade deve ser selecionada';
+    }
+    return true;
+}).build());
+exports.validateId = (0, secureValidation_1.validate)(new secureValidation_1.SecureValidator()
+    .field('id').required().isString()
+    .matches(/^[0-9a-fA-F]{24}$|^mock_\d+$|^\d+$/)
+    .build());
+exports.validateQuery = (0, secureValidation_1.validate)(new secureValidation_1.SecureValidator()
+    .field('page').optional().isNumber().custom((value) => {
+    const num = Number(value);
+    return !value || num >= 1 || 'Página deve ser um número positivo';
+}).build()
+    .field('limit').optional().isNumber().custom((value) => {
+    const num = Number(value);
+    return !value || (num >= 1 && num <= 100) || 'Limite deve estar entre 1 e 100';
+}).build()
+    .field('search').optional().isString().maxLength(100).build());
 const sanitizeInput = (req, res, next) => {
     const sanitize = (obj) => {
         if (typeof obj === 'string') {
@@ -184,10 +176,12 @@ const securityLogger = (req, res, next) => {
         return suspiciousPatterns.some(pattern => pattern.test(str));
     };
     if (req.body && checkSuspicious(req.body)) {
-        console.log(`🚨 Tentativa suspeita detectada - IP: ${req.ip}, Path: ${req.path}, Body:`, req.body);
+        const requestLogger = (0, logger_1.createRequestLogger)(req);
+        requestLogger.securityEvent('Suspicious request body detected', 'medium', { body: req.body });
     }
     if (req.query && checkSuspicious(req.query)) {
-        console.log(`🚨 Query suspeita detectada - IP: ${req.ip}, Path: ${req.path}, Query:`, req.query);
+        const requestLogger = (0, logger_1.createRequestLogger)(req);
+        requestLogger.securityEvent('Suspicious query detected', 'medium', { query: req.query });
     }
     next();
 };

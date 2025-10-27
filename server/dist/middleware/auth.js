@@ -8,6 +8,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../config/database");
 const User_1 = __importDefault(require("../models/User"));
 const errorHandler_1 = require("./errorHandler");
+const TokenBlacklistService_1 = require("../services/TokenBlacklistService");
 const generateToken = (user) => {
     const payload = {
         userId: user._id,
@@ -51,6 +52,14 @@ const authenticateToken = async (req, res, next) => {
             res.status(401).json({
                 success: false,
                 message: 'Token de acesso requerido'
+            });
+            return;
+        }
+        if (TokenBlacklistService_1.tokenBlacklistService.isTokenBlacklisted(token)) {
+            res.status(401).json({
+                success: false,
+                message: 'Token foi invalidado. Faça login novamente.',
+                code: 'TOKEN_BLACKLISTED'
             });
             return;
         }

@@ -6,8 +6,9 @@ import {
   validateLogin, 
   handleValidationErrors 
 } from '../middleware/security'
-import { registerRateLimit } from '../middleware/rateLimiting'
+import { authRateLimit, registerRateLimit } from '../middleware/rateLimiting'
 import { userActionLogger } from '../middleware/monitoring'
+import { checkTokenBlacklist } from '../services/TokenBlacklistService'
 
 const router = Router()
 
@@ -40,19 +41,53 @@ router.post('/register',
   }
 )
 
-// POST /api/auth/login - com validação
+// POST /api/auth/login - VERSÃO OTIMIZADA
 router.post('/login',
-  validateLogin,
-  handleValidationErrors,
-  userActionLogger('login'),
+  authRateLimit, // Manter rate limiting por segurança
   async (req: Request, res: Response) => {
+    const startTime = Date.now()
+    
     try {
-      const { email, password } = req.body
-      
-      const result = await AuthService.login({ email, password })
+      console.log('🚀 LOGIN OTIMIZADO - Início:', {
+        email: req.body.email,
+        ip: req.ip,
+        timestamp: new Date().toISOString()
+      })
+
+      const { email, password, rememberMe } = req.body
+
+      // Validação básica rápida
+      if (!email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email e senha são obrigatórios'
+        })
+      }
+
+      // Usar apenas o login básico do AuthService sem complexidades extras
+      const result = await AuthService.loginBasic({ 
+        email: email.toLowerCase().trim(), 
+        password: password.trim(),
+        rememberMe: !!rememberMe
+      })
+
+      const responseTime = Date.now() - startTime
+      console.log(`🎉 LOGIN SUCESSO - ${responseTime}ms:`, {
+        email: result.data?.user.email,
+        userId: result.data?.user._id,
+        responseTime: `${responseTime}ms`
+      })
 
       return res.status(200).json(result)
+      
     } catch (error: any) {
+      const responseTime = Date.now() - startTime
+      console.error('💥 ERRO NO LOGIN:', {
+        error: error.message,
+        responseTime: `${responseTime}ms`,
+        email: req.body.email
+      })
+      
       return res.status(error.statusCode || 500).json({
         success: false,
         message: error.message || 'Erro interno do servidor'
@@ -158,7 +193,7 @@ router.post('/change-password', requireAuth, async (req: AuthRequest, res: Respo
 })
 
 // GET /api/auth/me
-router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
+router.get('/me', checkTokenBlacklist, requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user!
 
@@ -193,9 +228,27 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
 })
 
 // POST /api/auth/refresh-token
-router.post('/refresh-token', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/refresh-token', async (req: Request, res: Response) => {
   try {
-    const result = await AuthService.refreshToken(req.user!)
+    const { refreshToken } = req.body
+    
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token é obrigatório'
+      })
+    }
+
+    const user = await AuthService.validateRefreshToken(refreshToken)
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token inválido ou expirado'
+      })
+    }
+
+    const result = await AuthService.refreshToken(user)
 
     return res.status(200).json(result)
   } catch (error: any) {
@@ -207,13 +260,77 @@ router.post('/refresh-token', requireAuth, async (req: AuthRequest, res: Respons
 })
 
 // POST /api/auth/logout
-router.post('/logout', async (req, res) => {
+router.post('/logout', async (req: Request, res: Response) => {
   try {
-    // Para logout, no caso de JWT, é principalmente no cliente
-    // Aqui podemos implementar blacklist de tokens se necessário
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const { refreshToken, userId } = req.body
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token é obrigatório para logout'
+      })
+    }
+
+    const result = await AuthService.logout(token, refreshToken, userId)
+
+    return res.status(200).json(result)
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    })
+  }
+})
+
+// POST /api/auth/logout-all - Logout de todos os dispositivos
+router.post('/logout-all', checkTokenBlacklist, requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)._id.toString()
+    
+    const result = await AuthService.logoutAllDevices(userId)
+
+    return res.status(200).json(result)
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    })
+  }
+})
+
+// GET /api/auth/sessions - Obter sessões ativas do usuário
+router.get('/sessions', checkTokenBlacklist, requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)._id.toString()
+    
+    const result = await AuthService.getUserSessions(userId)
+
+    return res.status(200).json(result)
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    })
+  }
+})
+
+// GET /api/auth/security-alerts - Obter alertas de segurança do usuário
+router.get('/security-alerts', checkTokenBlacklist, requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)._id.toString()
+    const limit = parseInt(req.query.limit as string) || 10
+    
+    const { SecurityNotificationService } = await import('../services/SecurityNotificationService')
+    const alerts = await SecurityNotificationService.getUserSecurityAlerts(userId, limit)
+    const stats = await SecurityNotificationService.getSecurityStats(userId)
+
     return res.status(200).json({
       success: true,
-      message: 'Logout realizado com sucesso'
+      data: {
+        alerts,
+        stats
+      }
     })
   } catch (error: any) {
     return res.status(500).json({

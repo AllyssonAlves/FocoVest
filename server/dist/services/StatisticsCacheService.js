@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.statisticsCacheService = void 0;
 const CacheService_1 = require("./CacheService");
@@ -221,22 +254,47 @@ class StatisticsCacheService {
     getCacheMetrics() {
         return CacheService_1.cacheService.getMetrics();
     }
-    async warmupCache() {
-        console.log('🔥 StatisticsCache: Iniciando warm-up do cache...');
-        try {
-            await Promise.all([
-                this.getGlobalStatistics(),
-                this.getRankingStatistics()
-            ]);
-            const users = await MockUserService_1.mockUserDB.getAllUsers();
-            const topUsers = users
-                .sort((a, b) => (b.statistics?.averageScore || 0) - (a.statistics?.averageScore || 0))
-                .slice(0, 5);
-            await Promise.all(topUsers.map((user) => this.getUserDetailedStatistics(user._id)));
-            console.log('✅ StatisticsCache: Warm-up concluído com sucesso');
+    async warmupCache(options = {}) {
+        const { background = false, limit = 3 } = options;
+        const executeWarmup = async () => {
+            const { globalLogger } = await Promise.resolve().then(() => __importStar(require('../utils/logger')));
+            globalLogger.info('Statistics cache warmup started');
+            try {
+                if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_CACHE_WARMUP) {
+                    globalLogger.info('Cache warmup skipped in production (set ENABLE_CACHE_WARMUP=true to enable)');
+                    return;
+                }
+                const warmupTimeout = setTimeout(() => {
+                    globalLogger.warn('Cache warmup timeout after 10 seconds');
+                }, 10000);
+                await Promise.allSettled([
+                    this.getGlobalStatistics(),
+                    this.getRankingStatistics()
+                ]);
+                const users = await MockUserService_1.mockUserDB.getAllUsers();
+                if (users.length > 0) {
+                    const topUsers = users
+                        .sort((a, b) => (b.statistics?.averageScore || 0) - (a.statistics?.averageScore || 0))
+                        .slice(0, limit);
+                    const batchSize = 2;
+                    for (let i = 0; i < topUsers.length; i += batchSize) {
+                        const batch = topUsers.slice(i, i + batchSize);
+                        await Promise.allSettled(batch.map((user) => this.getUserDetailedStatistics(user._id)));
+                    }
+                }
+                clearTimeout(warmupTimeout);
+                globalLogger.info('Statistics cache warmup completed successfully');
+            }
+            catch (error) {
+                const { globalLogger } = await Promise.resolve().then(() => __importStar(require('../utils/logger')));
+                globalLogger.error('Statistics cache warmup failed', error);
+            }
+        };
+        if (background) {
+            executeWarmup().catch(() => { });
         }
-        catch (error) {
-            console.error('❌ StatisticsCache: Erro no warm-up do cache:', error);
+        else {
+            await executeWarmup();
         }
     }
 }

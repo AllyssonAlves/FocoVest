@@ -97,7 +97,7 @@ const SimulationsPage: React.FC = () => {
 
   // Manipuladores de filtros
   const handleFilterChange = (key: keyof SimulationFilters, value: any) => {
-    setFilters(prev => ({
+    setFilters((prev: SimulationFilters) => ({
       ...prev,
       [key]: value,
       page: 1 // Resetar para primeira página
@@ -106,7 +106,7 @@ const SimulationsPage: React.FC = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    setFilters(prev => ({ ...prev, page: 1 }))
+    setFilters((prev: SimulationFilters) => ({ ...prev, page: 1 }))
   }
 
   const clearFilters = () => {
@@ -116,7 +116,7 @@ const SimulationsPage: React.FC = () => {
 
   // Manipuladores de paginação
   const handlePageChange = (page: number) => {
-    setFilters(prev => ({ ...prev, page }))
+    setFilters((prev: SimulationFilters) => ({ ...prev, page }))
   }
 
   // Manipuladores de ações dos simulados
@@ -160,10 +160,11 @@ const SimulationsPage: React.FC = () => {
       completed: 'Concluído'
     }
 
+    const status = simulation.status as keyof typeof statusColors
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusColors[simulation.status]}`}>
-        {statusIcons[simulation.status]}
-        {statusLabels[simulation.status]}
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusColors[status] || statusColors.draft}`}>
+        {statusIcons[status] || statusIcons.draft}
+        {statusLabels[status] || statusLabels.draft}
       </span>
     )
   }
@@ -204,7 +205,7 @@ const SimulationsPage: React.FC = () => {
             </span>
             <span className="flex items-center gap-1">
               <AcademicCapIcon className="w-4 h-4" />
-              {SIMULATION_CATEGORIES.find(c => c.value === simulation.category)?.label}
+              {SIMULATION_CATEGORIES.find((c: any) => c.value === simulation.category)?.label}
             </span>
           </div>
         </div>
@@ -215,7 +216,7 @@ const SimulationsPage: React.FC = () => {
           {simulation.tags.length > 0 && (
             <div className="mb-3">
               <div className="flex flex-wrap gap-1">
-                {simulation.tags.slice(0, 3).map((tag, index) => (
+                {simulation.tags.slice(0, 3).map((tag: string, index: number) => (
                   <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded">
                     {tag}
                   </span>
@@ -349,10 +350,13 @@ const SimulationsPage: React.FC = () => {
             <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-3 text-gray-400" />
             <input
               type="text"
+              id="search-simulations-old"
+              name="searchSimulationsOld"
               placeholder="Buscar simulados..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              autoComplete="off"
             />
           </div>
           <button
@@ -377,16 +381,18 @@ const SimulationsPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Categoria */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="filter-category-old" className="block text-sm font-medium text-gray-700 mb-2">
                   Categoria
                 </label>
                 <select
+                  id="filter-category-old"
+                  name="filterCategoryOld"
                   value={filters.category || ''}
                   onChange={(e) => handleFilterChange('category', e.target.value || undefined)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Todas</option>
-                  {SIMULATION_CATEGORIES.map(category => (
+                  {SIMULATION_CATEGORIES.map((category: any) => (
                     <option key={category.value} value={category.value}>
                       {category.label}
                     </option>
@@ -396,16 +402,18 @@ const SimulationsPage: React.FC = () => {
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="filter-status-old" className="block text-sm font-medium text-gray-700 mb-2">
                   Status
                 </label>
                 <select
+                  id="filter-status-old"
+                  name="filterStatusOld"
                   value={filters.status || ''}
                   onChange={(e) => handleFilterChange('status', e.target.value || undefined)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Todos</option>
-                  {SIMULATION_STATUS.map(status => (
+                  {SIMULATION_STATUS.map((status: any) => (
                     <option key={status.value} value={status.value}>
                       {status.label}
                     </option>
@@ -415,10 +423,12 @@ const SimulationsPage: React.FC = () => {
 
               {/* Universidades */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="filter-universities-old" className="block text-sm font-medium text-gray-700 mb-2">
                   Universidade
                 </label>
                 <select
+                  id="filter-universities-old"
+                  name="filterUniversitiesOld"
                   value={filters.universities?.[0] || ''}
                   onChange={(e) => handleFilterChange('universities', e.target.value ? [e.target.value] : undefined)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -434,10 +444,12 @@ const SimulationsPage: React.FC = () => {
 
               {/* Matérias */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="filter-subjects-old" className="block text-sm font-medium text-gray-700 mb-2">
                   Matéria
                 </label>
                 <select
+                  id="filter-subjects-old"
+                  name="filterSubjectsOld"
                   value={filters.subjects?.[0] || ''}
                   onChange={(e) => handleFilterChange('subjects', e.target.value ? [e.target.value] : undefined)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

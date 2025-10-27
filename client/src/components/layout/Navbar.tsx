@@ -6,13 +6,50 @@ import { ThemeToggleIcon } from '../ThemeToggle'
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
   const navigate = useNavigate()
   const { user, isAuthenticated, logout } = useAuth()
 
   const handleLogout = () => {
     logout()
     navigate('/')
+    setShowLogoutModal(false)
   }
+
+  const LogoutModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96 max-w-90vw">
+        <div className="flex items-center justify-center mb-4">
+          <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+            <LogOut className="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+        </div>
+        
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 text-center">
+          Confirmar saída
+        </h3>
+        
+        <p className="text-gray-600 dark:text-gray-400 text-center mb-6">
+          Tem certeza de que deseja sair da sua conta?
+        </p>
+
+        <div className="flex space-x-3">
+          <button
+            onClick={() => setShowLogoutModal(false)}
+            className="flex-1 px-4 py-2 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <nav className="bg-white dark:bg-gray-800 shadow-md transition-colors duration-200">
@@ -80,7 +117,7 @@ export default function Navbar() {
                       Meu Perfil
                     </Link>
                     <button
-                      onClick={handleLogout}
+                      onClick={() => setShowLogoutModal(true)}
                       className="w-full text-left px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-md flex items-center space-x-2"
                     >
                       <LogOut className="w-4 h-4" />
@@ -176,7 +213,7 @@ export default function Navbar() {
                   
                   <button
                     onClick={() => {
-                      handleLogout()
+                      setShowLogoutModal(true)
                       setIsMenuOpen(false)
                     }}
                     className="block w-full text-left text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400 font-medium"
@@ -212,6 +249,9 @@ export default function Navbar() {
           </div>
         )}
       </div>
+      
+      {/* Logout Modal */}
+      {showLogoutModal && <LogoutModal />}
     </nav>
   )
 }

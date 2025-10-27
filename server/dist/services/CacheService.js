@@ -183,16 +183,15 @@ exports.cacheService = new AdvancedCacheService({
     maxSize: 500,
     cleanupInterval: 120
 });
-if (process.env.NODE_ENV === 'development') {
-    exports.cacheService.on('hit', ({ key }) => {
-        console.log(`📈 Cache HIT: ${key}`);
-    });
-    exports.cacheService.on('miss', ({ key }) => {
-        console.log(`📉 Cache MISS: ${key}`);
-    });
-    exports.cacheService.on('evicted', ({ key, reason }) => {
-        console.log(`🗑️  Cache EVICTED: ${key} (reason: ${reason})`);
-    });
-}
+const logger_1 = require("../utils/logger");
+exports.cacheService.on('hit', ({ key }) => {
+    logger_1.globalLogger.cacheEvent('hit', key);
+});
+exports.cacheService.on('miss', ({ key }) => {
+    logger_1.globalLogger.cacheEvent('miss', key);
+});
+exports.cacheService.on('evicted', ({ key, reason }) => {
+    logger_1.globalLogger.cacheEvent('evicted', key, { reason });
+});
 exports.default = AdvancedCacheService;
 //# sourceMappingURL=CacheService.js.map

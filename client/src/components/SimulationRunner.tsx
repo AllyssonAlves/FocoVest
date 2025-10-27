@@ -89,15 +89,16 @@ export default function SimulationRunner({
 
   // Monitorar mudanças no tempo (só loga a cada 10 segundos para reduzir spam)
   useEffect(() => {
-    if (sessionState.totalTimeRemaining % 10 === 0) {
-      console.log('⏱️ Tempo restante:', sessionState.totalTimeRemaining)
+    // Log de tempo apenas em desenvolvimento a cada minuto
+    if (import.meta.env.DEV && sessionState.totalTimeRemaining > 0 && sessionState.totalTimeRemaining % 60 === 0) {
+      console.log('⏱️ Tempo restante:', `${Math.floor(sessionState.totalTimeRemaining / 60)}min`)
     }
   }, [sessionState.totalTimeRemaining])
 
   // Carregar progresso salvo ao montar
   useEffect(() => {
     const hasProgress = sessionControls.loadProgress()
-    if (hasProgress) {
+    if (hasProgress && import.meta.env.DEV) {
       console.log('📥 Progresso anterior carregado')
     }
   }, [])
@@ -422,6 +423,7 @@ export default function SimulationRunner({
                   >
                     <input
                       type="radio"
+                      id={`answer-${alternative.id}`}
                       name="answer"
                       value={alternative.id}
                       checked={isSelected}

@@ -59,7 +59,10 @@ declare class StatisticsCacheService {
     invalidateUserCache(userId: string): void;
     invalidateAllCache(): void;
     getCacheMetrics(): import("./CacheService").CacheMetrics;
-    warmupCache(): Promise<void>;
+    warmupCache(options?: {
+        background?: boolean;
+        limit?: number;
+    }): Promise<void>;
 }
 export declare const statisticsCacheService: StatisticsCacheService;
 export default StatisticsCacheService;
