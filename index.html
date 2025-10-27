@@ -11,11 +11,25 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/FocoVest/assets/index-Cj0bNE3Y.js"></script>
+    
+    <!-- GitHub Pages SPA routing fix -->
+    <script type="text/javascript">
+      (function(l) {
+        if (l.search[1] === '/' ) {
+          var decoded = l.search.slice(1).split('&').map(function(s) { 
+            return s.replace(/~and~/g, '&')
+          }).join('?');
+          window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + decoded + l.hash
+          );
+        }
+      }(window.location))
+    </script>
+    <script type="module" crossorigin src="/FocoVest/assets/index-Colr5HAt.js"></script>
     <link rel="modulepreload" crossorigin href="/FocoVest/assets/rolldown-runtime-Dq6TatWD.js">
-    <link rel="modulepreload" crossorigin href="/FocoVest/assets/react-vendor-wmn9h6gZ.js">
-    <link rel="modulepreload" crossorigin href="/FocoVest/assets/vendor-BgSL8lot.js">
-    <link rel="stylesheet" crossorigin href="/FocoVest/assets/index-DBu-hPiH.css">
+    <link rel="modulepreload" crossorigin href="/FocoVest/assets/react-vendor-BpwrftXY.js">
+    <link rel="modulepreload" crossorigin href="/FocoVest/assets/vendor-DgHb_Dai.js">
+    <link rel="stylesheet" crossorigin href="/FocoVest/assets/index-D5vhVtLr.css">
   </head>
   <body>
     <div id="root"></div>
